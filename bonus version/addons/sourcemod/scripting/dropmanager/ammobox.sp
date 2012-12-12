@@ -1,9 +1,9 @@
 // ====[ VARIABLES ]================================================================
-enum
+enum ammotype
 {
 	check,
 	drop,
-	touch
+	pickup
 }
 
 new Handle:lifetimer_ammo[MAXENTITIES + 1],
@@ -45,13 +45,13 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 		if (GetPlayerWeaponSlot(client, Slot_Primary) != -1)
 		{
 			// When player just touched his own ammo box
-			if (AmmoBoxOwner[ammobox] == client)
+			if (AmmoBoxOwner[ammobox] == client && HasAmmoBox[client] == false)
 			{
 				// Kill timer and remove ammo box model from ground
 				KillAmmoBoxTimer(ammobox);
 				RemoveAmmoBox(ammobox);
 
-				EmitAmbientSound(AmmoSound, vecOrigin, client, _, _, 1.0);
+				EmitAmbientSound(AmmoSound, vecOrigin, client);
 
 				// Since owner touched his ammo box, make sure he is having it right now
 				HasAmmoBox[client] = true;
@@ -71,29 +71,15 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 				RemoveAmmoBox(ammobox);
 
 				// Play equip sound on touch
-				EmitAmbientSound(AmmoSound, vecOrigin, client, _, _, 1.0);
+				EmitAmbientSound(AmmoSound, vecOrigin, client);
 
-				// Set ammunition mode to 'touch'
-				PerformAmmunition(client, touch);
+				// Set ammunition mode to 'pickup'
+				PerformAmmunition(client, ammotype:pickup);
 				return Plugin_Handled;
 			}
-			return Plugin_Handled;
 		}
-		return Plugin_Handled;
 	}
 	return Plugin_Handled;
-}
-
-/* RemoveDroppedAmmoBox()
- *
- * Removes dropped ammobox after X seconds on a map.
- * --------------------------------------------------------------------------------- */
-public Action:RemoveDroppedAmmoBox(Handle:timer, any:ammobox)
-{
-	lifetimer_ammo[ammobox] = INVALID_HANDLE;
-
-	// Timer is killed, so now we can easily remove model from world
-	RemoveAmmoBox(ammobox);
 }
 
 /* CreateAmmoBox()
@@ -115,20 +101,20 @@ CreateAmmoBox(ammobox, client)
 		NormalizeVector(velocity, velocity);
 
 		// Scale vector to a given value
-		ScaleVector(velocity, 350.0);
+		ScaleVector(velocity, 400.0);
 
 		// Set ammo box model and ammo box team depends on team
 		switch (team)
 		{
 			case DODTeam_Allies:
 			{
-				SetEntityModel(ammobox, AlliesAmmoModel);
 				SetEntProp(ammobox, Prop_Send, "m_nSkin", AmmoBoxTeam[DODTeam_Allies]);
+				DispatchKeyValue(ammobox, "model", AlliesAmmoModel);
 			}
 			case DODTeam_Axis:
 			{
-				SetEntityModel(ammobox, AxisAmmoModel);
 				SetEntProp(ammobox, Prop_Send, "m_nSkin", AmmoBoxTeam[DODTeam_Axis]);
+				DispatchKeyValue(ammobox, "model", AxisAmmoModel);
 			}
 		}
 
@@ -150,7 +136,7 @@ CreateAmmoBox(ammobox, client)
 		}
 
 		// Hook entity touch (in our case is ammobox)
-		SDKHook(ammobox, SDKHook_Touch, OnAmmoBoxTouched);
+		CreateTimer(0.5, HookAmmoBoxTouch, ammobox);
 
 		lifetimer_ammo[ammobox] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedAmmoBox, ammobox, TIMER_FLAG_NO_MAPCHANGE);
 
@@ -160,7 +146,8 @@ CreateAmmoBox(ammobox, client)
 		// Realism mode is enabled > recude amount of ammo depends on clipsize value (drop mode)
 		if (GetConVarBool(ammorealism))
 		{
-			PerformAmmunition(client, drop);
+			PerformAmmunition(client, ammotype:drop);
+			HasAmmoBox[client] = false;
 		}
 
 		// Realism mode is disabled AND player is still alive
@@ -171,8 +158,34 @@ CreateAmmoBox(ammobox, client)
 			HasAmmoBox[client]    = false;
 		}
 	}
+}
 
-	HasAmmoBox[client] = false;
+/* HookAmmoBoxTouch()
+ *
+ * Makes ammo box able to be touched by player.
+ * --------------------------------------------------------------------------------- */
+public Action:HookAmmoBoxTouch(Handle:timer, any:ammobox)
+{
+	// Make sure ammo box entity is valid
+	if (IsValidEntity(ammobox))
+	{
+		SetEntProp(ammobox, Prop_Send, "m_CollisionGroup", COLLISIONGROUP);
+
+		// Possibly memory leak issue should be corrected in the OnStartTouch entity hook
+		SDKHook(ammobox, SDKHook_StartTouch, OnAmmoBoxTouched);
+	}
+}
+
+/* RemoveDroppedAmmoBox()
+ *
+ * Removes dropped ammobox after X seconds on a map.
+ * --------------------------------------------------------------------------------- */
+public Action:RemoveDroppedAmmoBox(Handle:timer, any:ammobox)
+{
+	lifetimer_ammo[ammobox] = INVALID_HANDLE;
+
+	// Timer is killed, so now we can easily remove model from world
+	RemoveAmmoBox(ammobox);
 }
 
 /* RemoveAmmoBox()
@@ -181,17 +194,24 @@ CreateAmmoBox(ammobox, client)
  * --------------------------------------------------------------------------------- */
 RemoveAmmoBox(ammobox)
 {
-	SDKUnhook(ammobox, SDKHook_Touch, OnAmmoBoxTouched);
+	if (IsValidEntity(ammobox))
+	{
+		SDKUnhook(ammobox, SDKHook_StartTouch, OnAmmoBoxTouched);
 
-	// Remove ammo box model from map
-	if (IsValidEntity(ammobox)) AcceptEntityInput(ammobox, "Kill");
+		decl String:model[PLATFORM_MAX_PATH];
+		Format(model, PLATFORM_MAX_PATH, NULL_STRING);
+		GetEntPropString(ammobox,  Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);
+
+		if (StrEqual(model, AxisAmmoModel) || StrEqual(model, AlliesAmmoModel))
+			AcceptEntityInput(ammobox, "KillHierarchy");
+	}
 }
 
 /* PerformAmmunition()
  *
  * Performs all ammunition stuff (ammo check, ammo dropping & touch)
  * --------------------------------------------------------------------------------- */
-PerformAmmunition(client, type)
+PerformAmmunition(client, ammotype:index)
 {
 	// Perform ammunition only for primary weapon
 	new PrimaryWeapon = GetPlayerWeaponSlot(client, Slot_Primary);
@@ -230,7 +250,7 @@ PerformAmmunition(client, type)
 			new newammo    = ammo_clipsize[WeaponID] * clipsize;
 
 			// Get type of ammunition stuff
-			switch (type)
+			switch (index)
 			{
 				// Checking current ammo size
 				case check:
@@ -241,8 +261,8 @@ PerformAmmunition(client, type)
 					// Otherwise if its a realism mode, enable dropping again
 					else if (GetConVarBool(ammorealism)) HasAmmoBox[client] = true;
 				}
-				case drop:  SetEntData(client, WeaponAmmo, currammo - newammo, 4, true);
-				case touch: SetEntData(client, WeaponAmmo, currammo + newammo, 4, true);
+				case drop:   SetEntData(client, WeaponAmmo, currammo - newammo, 4, true);
+				case pickup: SetEntData(client, WeaponAmmo, currammo + newammo, 4, true);
 			}
 		}
 	}

@@ -25,25 +25,13 @@ public Action:OnBombTouched(tnt, client)
 			RemoveTNT(tnt);
 
 			// Play specified TNT touch sound
-			EmitAmbientSound(TNTSound, vecOrigin, client, _, _, 1.0);
+			EmitAmbientSound(TNTSound, vecOrigin, client);
 
 			// Client has a TNT right now
 			HasTNT[client] = true;
-			return Plugin_Handled;
 		}
-		return Plugin_Handled;
 	}
 	return Plugin_Handled;
-}
-
-/* RemoveDroppedTnT()
- *
- * Removes dropped TNT after X seconds on a map.
- * --------------------------------------------------------------------------------- */
-public Action:RemoveDroppedTnT(Handle:timer, any:tnt)
-{
-	lifetimer_tnt[tnt] = INVALID_HANDLE;
-	RemoveTNT(tnt);
 }
 
 /* CreateTNT()
@@ -68,11 +56,11 @@ CreateTNT(tnt, client)
 		// Get vectors in the direction of an angle
 		GetAngleVectors(angles, velocity, NULL_VECTOR, NULL_VECTOR);
 
-		NormalizeVector(velocity,velocity);
-		ScaleVector(velocity, 350.0);
+		NormalizeVector(velocity, velocity);
+		ScaleVector(velocity, 400.0);
 
 		// Set TNT model and spawn it
-		SetEntityModel(tnt, TNTModel);
+		DispatchKeyValue(tnt, "model", TNTModel);
 		DispatchSpawn(tnt);
 
 		if (GetClientHealth(client) > 1)
@@ -89,7 +77,7 @@ CreateTNT(tnt, client)
 			TeleportEntity(tnt, origin, NULL_VECTOR, NULL_VECTOR);
 		}
 
-		SDKHook(tnt, SDKHook_Touch, OnBombTouched);
+		CreateTimer(0.5, HookBombTouch, tnt);
 
 		// Create timer depends on lifetime value to remove bomb from map after X seconds
 		lifetimer_tnt[tnt] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedTnT, tnt, TIMER_FLAG_NO_MAPCHANGE);
@@ -99,16 +87,47 @@ CreateTNT(tnt, client)
 	HasTNT[client] = false;
 }
 
+/* HookBombTouch()
+ *
+ * Makes TNT able to be touched by player.
+ * --------------------------------------------------------------------------------- */
+public Action:HookBombTouch(Handle:timer, any:tnt)
+{
+	if (IsValidEntity(tnt))
+	{
+		SetEntProp(tnt, Prop_Send, "m_CollisionGroup", COLLISIONGROUP);
+		SDKHook(tnt, SDKHook_StartTouch, OnBombTouched);
+	}
+}
+
+/* RemoveDroppedTnT()
+ *
+ * Removes dropped TNT after X seconds on a map.
+ * --------------------------------------------------------------------------------- */
+public Action:RemoveDroppedTnT(Handle:timer, any:tnt)
+{
+	lifetimer_tnt[tnt] = INVALID_HANDLE;
+	RemoveTNT(tnt);
+}
+
 /* RemoveTNT()
  *
  * Fully removes a TNT model from map.
  * --------------------------------------------------------------------------------- */
 RemoveTNT(tnt)
 {
-	SDKUnhook(tnt, SDKHook_Touch, OnBombTouched);
+	// Make sure that entity is valid
+	if (IsValidEntity(tnt))
+	{
+		SDKUnhook(tnt, SDKHook_StartTouch, OnBombTouched);
 
-	// I prefer AcceptEntityInput
-	if (IsValidEntity(tnt)) AcceptEntityInput(tnt, "Kill");
+		// Removes this entity and all its children from the world
+		decl String:model[PLATFORM_MAX_PATH];
+		Format(model, PLATFORM_MAX_PATH, NULL_STRING);
+		GetEntPropString(tnt,  Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);
+
+		if (StrEqual(model, TNTModel)) AcceptEntityInput(tnt, "KillHierarchy");
+	}
 }
 
 /* RemoveWeapon()

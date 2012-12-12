@@ -7,7 +7,11 @@ new Handle:lifetimer_healthkit[MAXENTITIES + 1],
 	Handle:healthkitteamcolor;
 
 new bool:HasHealthkit[DOD_MAXPLAYERS + 1], HealthkitTeam[4] = { 0, 0, 2, 1 }, HealthkitOwner[MAXENTITIES + 1];
-new const String:HealthkitModel[] = { "models/props_misc/ration_box01.mdl" }, String:HealthkitSound[] = { "object/object_taken.wav" };
+
+new const
+	String:HealthkitModel[] = { "models/props_misc/ration_box01.mdl" },
+	String:HealthkitSound[] = { "object/object_taken.wav" },
+	String:HealSound[]      = { "items/smallmedkit1.wav" };
 
 /* OnHealthKitTouched()
  *
@@ -23,15 +27,19 @@ public Action:OnHealthKitTouched(healthkit, client)
 		GetClientEyePosition(client, vecOrigin);
 
 		// If healthkit's owner just touched healthkit (and had more health than defined in selfheal, equip healthkit back)
-		if (HealthkitOwner[healthkit] == client/*  && GetClientHealth(client) >= GetConVarInt(healthkitselfheal) */)
+		if (HealthkitOwner[healthkit] == client/*  && GetClientHealth(client) > GetConVarInt(healthkitselfheal) */)
 		{
-			KillHealthKitTimer(healthkit);
-			RemoveHealthkit(healthkit);
+			if (HasHealthkit[client] == false)
+			{
+				KillHealthKitTimer(healthkit);
+				RemoveHealthkit(healthkit);
 
-			// Play a pickup sound around player on pickup
-			EmitAmbientSound(HealthkitSound, vecOrigin, client, _, _, 1.0);
+				// Play a pickup sound around player on pickup
+				EmitAmbientSound(HealthkitSound, vecOrigin, client);
 
-			HasHealthkit[client] = true;
+				HasHealthkit[client] = true;
+				return Plugin_Handled;
+			}
 			return Plugin_Handled;
 		}
 
@@ -51,10 +59,10 @@ public Action:OnHealthKitTouched(healthkit, client)
 			if (health < MAXHEALTH)
 			{
 				// If current client health + healthkit is more than 100, just give player full health
-				if (health + healthkitadd > MAXHEALTH)
+				if (health + healthkitadd >= MAXHEALTH)
 				{
 					SetEntityHealth(client, MAXHEALTH);
-					PrintCenterText(client, "%i hp", MAXHEALTH);
+					PrintCenterText(client, "100 hp");
 				}
 				else
 				{
@@ -66,25 +74,12 @@ public Action:OnHealthKitTouched(healthkit, client)
 				KillHealthKitTimer(healthkit);
 				RemoveHealthkit(healthkit);
 
-				EmitAmbientSound(HealthkitSound, vecOrigin, client, _, _, 1.0);
-				return Plugin_Handled;
+				EmitAmbientSound(HealSound, vecOrigin, client);
 			}
 			return Plugin_Handled;
 		}
-		return Plugin_Handled;
 	}
 	return Plugin_Handled;
-}
-
-/* RemoveDroppedHealthKit()
- *
- * Removes dropped healthkit after X seconds on a map.
- * --------------------------------------------------------------------------------- */
-public Action:RemoveDroppedHealthKit(Handle:timer, any:healthkit)
-{
-	// Kill timer
-	lifetimer_healthkit[healthkit] = INVALID_HANDLE;
-	RemoveHealthkit(healthkit);
 }
 
 /* CreateHealthkit()
@@ -103,11 +98,12 @@ CreateHealthkit(healthkit, client)
 
 	// Normalize vector
 	NormalizeVector(velocity, velocity);
-	ScaleVector(velocity, 350.0);
+	ScaleVector(velocity, 450.0);
 
 	// Set healthkit model
-	SetEntityModel(healthkit, HealthkitModel);
 	SetEntProp(healthkit, Prop_Send, "m_nSkin", HealthkitTeam[team]);
+
+	DispatchKeyValue(healthkit, "model", HealthkitModel);
 	DispatchSpawn(healthkit);
 
 	// If player is alive, teleport entity using stored origin, angles and velocity
@@ -138,9 +134,34 @@ CreateHealthkit(healthkit, client)
 		}
 	}
 
-	SDKHook(healthkit, SDKHook_Touch, OnHealthKitTouched);
+	CreateTimer(0.5, HookHealthKitTouch, healthkit);
 
 	lifetimer_healthkit[healthkit] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedHealthKit, healthkit);
+}
+
+/* HookHealthKitTouch()
+ *
+ * Makes healthkit able to be touched by player.
+ * --------------------------------------------------------------------------------- */
+public Action:HookHealthKitTouch(Handle:timer, any:healthkit)
+{
+	if (IsValidEntity(healthkit))
+	{
+		// Change to proper collision group for making healthkit pickup'ble
+		SetEntProp(healthkit, Prop_Send, "m_CollisionGroup", COLLISIONGROUP);
+		SDKHook(healthkit, SDKHook_StartTouch, OnHealthKitTouched);
+	}
+}
+
+/* RemoveDroppedHealthKit()
+ *
+ * Removes dropped healthkit after X seconds on a map.
+ * --------------------------------------------------------------------------------- */
+public Action:RemoveDroppedHealthKit(Handle:timer, any:healthkit)
+{
+	// Kill timer
+	lifetimer_healthkit[healthkit] = INVALID_HANDLE;
+	RemoveHealthkit(healthkit);
 }
 
 /* RemoveHealthkit()
@@ -149,10 +170,17 @@ CreateHealthkit(healthkit, client)
  * --------------------------------------------------------------------------------- */
 RemoveHealthkit(healthkit)
 {
-	// Healthkit is removed - unhook touch stuff
-	SDKUnhook(healthkit, SDKHook_Touch, OnHealthKitTouched);
+	if (IsValidEntity(healthkit))
+	{
+		// Entity removed - unhook touching
+		SDKUnhook(healthkit, SDKHook_StartTouch, OnHealthKitTouched);
 
-	if (IsValidEntity(healthkit)) AcceptEntityInput(healthkit, "Kill");
+		decl String:model[PLATFORM_MAX_PATH];
+		Format(model, PLATFORM_MAX_PATH, NULL_STRING);
+		GetEntPropString(healthkit,  Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);
+
+		if (StrEqual(model, HealthkitModel)) AcceptEntityInput(healthkit, "KillHierarchy");
+	}
 }
 
 /* KillHealthKitTimer()
