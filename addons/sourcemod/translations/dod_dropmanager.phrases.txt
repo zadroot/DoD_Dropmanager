@@ -1,0 +1,28 @@
+"Phrases"
+{
+	"Menu title"
+	{
+		"en"		"Choose an item to drop:"
+	}
+	"Healthkit"
+	{
+		"en"		"Healthkit"
+	}
+	"Ammobox"
+	{
+		"en"		"Ammo box"
+	}
+	"TNT"
+	{
+		"en"		"TNT"
+	}
+	"Close"
+	{
+		"en"		"Close"
+	}
+	"Cooldown"
+	{
+		"#format"	"{1:i}"
+		"en"		"You are not allowed to drop item for {1} more seconds!"
+	}
+}

@@ -1,0 +1,27 @@
+"Phrases"
+{
+	"Menu title"
+	{
+		"fr"		"Choisissez un objet a lacher:"
+	}
+	"Healthkit"
+	{
+		"fr"		"Kit de soins"
+	}
+	"Ammobox"
+	{
+		"fr"		"Boite de munitions"
+	}
+	"TNT"
+	{
+		"fr"		"TNT"
+	}
+	"Close"
+	{
+		"fr"		"Fermer"
+	}
+	"Cooldown"
+	{
+		"fr"		"Vous n'etes pas autoriser a lacher un objet pendant {1} secondes!"
+	}
+}

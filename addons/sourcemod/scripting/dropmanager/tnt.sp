@@ -1,6 +1,10 @@
 // ====[ VARIABLES ]================================================================
-new Handle:lifetimer_tnt[MAXENTITIES + 1], Handle:allowtnt;
-new bool:HasTNT[DOD_MAXPLAYERS + 1];
+new Handle:lifetimer_tnt[MAXENTITIES + 1],
+	Handle:allowtnt,
+	Handle:tntpickuprule,
+	Handle:tntmaxdrops;
+
+new bool:HasTNT[DOD_MAXPLAYERS + 1], BombsDropped[DOD_MAXPLAYERS + 1];
 new const String:TNTModel[] = { "models/weapons/w_tnt.mdl" }, String:TNTSound[] = { "weapons/c4_pickup.wav" };
 
 /* OnBombTouched()
@@ -17,28 +21,38 @@ public Action:OnBombTouched(tnt, client)
 		// If player is dont have a bomb (weapon in 4th slot) - perform TNT equip
 		if (GetPlayerWeaponSlot(client, Slot_Bomb) == -1)
 		{
-			// Just give bomb to a client
-			GivePlayerItem(client, "weapon_basebomb");
+			new pickuprule = GetConVarInt(tntpickuprule);
+			new clteam     = GetClientTeam(client);
+			new bombteam   = GetEntProp(tnt, Prop_Send, "m_nSkin");
 
-			// Kill timer and remove bomb from map
-			KillBombTimer(tnt);
-			RemoveTNT(tnt);
+			// Perform healing depends on pickup rule
+			if ((pickuprule == 0)
+			||  (pickuprule == 1 && bombteam == clteam)
+			||  (pickuprule == 2 && bombteam != clteam))
+			{
+				// Just give bomb to a client
+				GivePlayerItem(client, "weapon_basebomb");
 
-			// Play specified TNT touch sound
-			EmitAmbientSound(TNTSound, vecOrigin, client);
+				// Kill timer and remove bomb from map
+				KillBombTimer(tnt);
+				RemoveTNT(tnt);
 
-			// Client has a TNT right now
-			HasTNT[client] = true;
+				// Play specified TNT touch sound
+				EmitAmbientSound(TNTSound, vecOrigin, client);
+
+				// Client has a TNT right now
+				HasTNT[client] = true;
+			}
 		}
 	}
 	return Plugin_Handled;
 }
 
-/* CreateTNT()
+/* SpawnTNT()
  *
  * Spawns a TNT bomb in front of player.
  * --------------------------------------------------------------------------------- */
-CreateTNT(tnt, client)
+SpawnTNT(tnt, client)
 {
 	// Get bomb slot
 	new bomb = GetPlayerWeaponSlot(client, Slot_Bomb);
@@ -57,21 +71,27 @@ CreateTNT(tnt, client)
 		GetAngleVectors(angles, velocity, NULL_VECTOR, NULL_VECTOR);
 
 		NormalizeVector(velocity, velocity);
-		ScaleVector(velocity, 400.0);
+		ScaleVector(velocity, 450.0);
 
 		// Set TNT model and spawn it
 		DispatchKeyValue(tnt, "model", TNTModel);
-		DispatchSpawn(tnt);
 
-		if (GetClientHealth(client) > 1)
+		if (DispatchSpawn(tnt))
+		{
+			SetEntProp(tnt, Prop_Send, "m_nSkin", GetClientTeam(client));
+			SetEntProp(tnt, Prop_Send, "m_usSolidFlags",  152);
+			SetEntProp(tnt, Prop_Send, "m_CollisionGroup", 11);
+		}
+
+		if (GetClientHealth(client) > 1 && BombsDropped[client] < GetConVarInt(tntmaxdrops))
 		{
 			origin[2] += 55.0;
 			TeleportEntity(tnt, origin, angles, velocity);
 
-			// No need to remove bomb from dead player
+			BombsDropped[client]++;
 			RemoveWeapon(client, bomb);
 		}
-		else
+		else if (GetClientHealth(client) < 1)
 		{
 			origin[2] += 5.0;
 			TeleportEntity(tnt, origin, NULL_VECTOR, NULL_VECTOR);
@@ -81,10 +101,8 @@ CreateTNT(tnt, client)
 
 		// Create timer depends on lifetime value to remove bomb from map after X seconds
 		lifetimer_tnt[tnt] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedTnT, tnt, TIMER_FLAG_NO_MAPCHANGE);
+		HasTNT[client] = false;
 	}
-
-	// Client is no longer have tnt
-	HasTNT[client] = false;
 }
 
 /* HookBombTouch()
@@ -93,11 +111,7 @@ CreateTNT(tnt, client)
  * --------------------------------------------------------------------------------- */
 public Action:HookBombTouch(Handle:timer, any:tnt)
 {
-	if (IsValidEntity(tnt))
-	{
-		SetEntProp(tnt, Prop_Send, "m_CollisionGroup", COLLISIONGROUP);
-		SDKHook(tnt, SDKHook_StartTouch, OnBombTouched);
-	}
+	if (IsValidEntity(tnt)) SDKHook(tnt, SDKHook_StartTouch, OnBombTouched);
 }
 
 /* RemoveDroppedTnT()
@@ -124,7 +138,7 @@ RemoveTNT(tnt)
 		// Removes this entity and all its children from the world
 		decl String:model[PLATFORM_MAX_PATH];
 		Format(model, PLATFORM_MAX_PATH, NULL_STRING);
-		GetEntPropString(tnt,  Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);
+		GetEntPropString(tnt, Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);
 
 		if (StrEqual(model, TNTModel)) AcceptEntityInput(tnt, "KillHierarchy");
 	}

@@ -5,7 +5,7 @@
 *   Allows player to drop healthkit, ammo box or TNT.
 *   Special thanks to FeuerSturm and BenSib!
 *
-* Version 1.0
+* Version 2.0
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
@@ -19,12 +19,8 @@
 
 // ====[ CONSTANTS ]=================================================================
 #define PLUGIN_NAME    "DoD:S DropManager"
-#define PLUGIN_VERSION "1.0"
+#define PLUGIN_VERSION "2.0"
 
-/* The 'm_CollisionGroup' flag
-   Current value is 4 (known as DERBIS). It prevents collision between healthkit, ammo box or TNT
-   Set it to 0 to disable collision group (i.e. use default one) */
-#define COLLISIONGROUP 4
 #define DOD_MAXPLAYERS 33
 #define MAXHEALTH      100
 #define MAXENTITIES    2048 // Virtual entities can go to 2048
@@ -56,6 +52,7 @@ enum //Items
 // ====[ VARIABLES ]=================================================================
 new Handle:menumode     = INVALID_HANDLE,
 	Handle:deaddrop     = INVALID_HANDLE,
+	Handle:alivecheck   = INVALID_HANDLE,
 	Handle:itemlifetime = INVALID_HANDLE,
 	Handle:cooldowntime = INVALID_HANDLE,
 	ItemDropped[DOD_MAXPLAYERS + 1];
@@ -90,6 +87,7 @@ public OnPluginStart()
 	allowtnt           = CreateConVar("dod_dropmanager_tnt",          "1",  "Whether or not enable TNT dropping", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	menumode           = CreateConVar("dod_dropmanager_menumode",     "1",  "Whether or not use 'menu mode'\nIt lets player choose items for dropping using panel", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	deaddrop           = CreateConVar("dod_dropmanager_deaddrop",     "0",  "Determines item to drop on player's death:\n0 = Nothing\n1 = Healthkit\n2 = Ammo box\n3 = TNT\n4 = Random", FCVAR_PLUGIN, true, 0.0, true, 4.0);
+	alivecheck         = CreateConVar("dod_dropmanager_alivecheck",   "1",  "Whether or not check item avaliability before death. Can be useful for deaddop feature", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	itemlifetime       = CreateConVar("dod_dropmanager_lifetime",     "45", "Number of seconds a dropped item stays on the map", FCVAR_PLUGIN, true, 10.0, true, 120.0);
 	cooldowntime       = CreateConVar("dod_dropmanager_cooldown",     "3",  "Number of seconds to wait between two drop commands", FCVAR_PLUGIN, true, 0.0, true, 30.0);
 
@@ -97,11 +95,18 @@ public OnPluginStart()
 	healthkithealth    = CreateConVar("dod_drophealthkit_addhealth",  "50", "Determines amount of health to add to a player which picking up a healthkit", FCVAR_PLUGIN, true, 0.0, true, 100.0);
 	healthkitselfheal  = CreateConVar("dod_drophealthkit_selfheal",   "30", "Determines amount of player's health to allow heal himself using own healthkit", FCVAR_PLUGIN, true, 0.0, true, 99.0);
 	healthkitteamcolor = CreateConVar("dod_drophealthkit_teamcolor",  "0",  "Whether or not colorize dropped healthkit depends on player's team", FCVAR_PLUGIN, true, 0.0, true, 1.0);
+	healthkitcustom    = CreateConVar("dod_drophealthkit_newmodel",   "1",  "Whether or not use custom model for healthkit\nDo not change until map change!", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 
 	ammopickuprule     = CreateConVar("dod_dropammobox_pickuprule",   "1",  "Determines who can pick up dropped ammo box:\n0 = Everyone\n1 = Only teammates\n2 = Only enemies", FCVAR_PLUGIN, true, 0.0, true, 2.0);
 	ammorealism        = CreateConVar("dod_dropammobox_realism",      "1",  "Whether or not use 'realism' mode\nIt means player may share ammo of primary weapons until no ammo left", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	ammosize           = CreateConVar("dod_dropammobox_clipsize",     "2",  "Determines number of clips a dropped ammo box contains", FCVAR_PLUGIN, true, 1.0, true, 5.0);
 	ammovoice          = CreateConVar("dod_dropammobox_voice",        "1",  "Whether or not use voice command when ammo is dropped", FCVAR_PLUGIN, true, 0.0, true, 1.0);
+
+	tntpickuprule      = CreateConVar("dod_droptnt_pickuprule",       "0",  "Determines who can pick up dropped TNT:\n0 = Everyone\n1 = Only teammates\n2 = Only enemies", FCVAR_PLUGIN, true, 0.0, true, 2.0);
+	tntmaxdrops        = CreateConVar("dod_droptnt_maxdrops",         "3",  "Determines how many TNT's player can drop per life\nThis cvar created against spamming around bomb dispencer", FCVAR_PLUGIN, true, 1.0);
+
+	// Added since 2.0
+	LoadTranslations("dod_dropmanager.phrases");
 
 	// Store send property offset for ammo setup
 	m_iAmmo = FindSendPropOffs("CDODPlayer", "m_iAmmo");
@@ -117,17 +122,22 @@ public OnPluginStart()
 	AutoExecConfig(true, "dod_dropmanager");
 }
 
-/* OnMapStart()
+/* OnConfigsExecuted()
  *
- * When the map starts.
+ * When the map has loaded and all plugin configs are done executing.
  * ---------------------------------------------------------------------------------- */
-public OnMapStart()
+public OnConfigsExecuted()
 {
-	// Allow custom healthkit files to be downloaded to client
-	for (new i = 0; i < sizeof(HealthkitFiles); i++)
-		AddFileToDownloadsTable(HealthkitFiles[i]);
+	// If custom healthkit model is defined...
+	if (GetConVarBool(healthkitcustom))
+	{
+		// ...allow custom healthkit files to be downloaded to client
+		for (new i = 0; i < sizeof(HealthkitFiles); i++)
+			AddFileToDownloadsTable(HealthkitFiles[i]);
+		PrecacheModel(HealthkitModel2, true);
+	}
 
-	// Precache a healthkit's model & sounds
+	// Precache a healthkit's model & sound
 	PrecacheModel(HealthkitModel,  true);
 	PrecacheSound(HealthkitSound,  true);
 	PrecacheSound(HealSound,       true);
@@ -162,6 +172,8 @@ public Action:OnPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcas
 	if (GetConVarBool(allowammobox))
 		 HasAmmoBox[client] = true;
 	else HasAmmoBox[client] = false;
+
+	BombsDropped[client]    = false;
 }
 
 /* OnPlayerDeath()
@@ -184,18 +196,46 @@ public Action:OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcas
 		switch (GetConVarInt(deaddrop))
 		{
 			// Check for item avaliability and create it depends on value
-			case 1: if (HasHealthkit[client]) CreateItem(client, Healthkit);
-			case 2: if (HasAmmoBox[client])   CreateItem(client, Ammobox);
-			case 3: if (HasTNT[client])       CreateItem(client, Bomb);
+			case 1:
+			{
+				// If 'alive check' is disabled, create healthkit even if healthkits is disabled
+				if (!GetConVarBool(alivecheck)) CreateItem(client, Healthkit);
+				else if (HasHealthkit[client])  CreateItem(client, Healthkit);
+			}
+			case 2:
+			{
+				// Otherwise check item avaliability, and create that
+				if (!GetConVarBool(alivecheck)) CreateItem(client, Ammobox);
+				else if (HasAmmoBox[client])    CreateItem(client, Ammobox);
+			}
+			case 3:
+			{
+				if (!GetConVarBool(alivecheck)) CreateItem(client, Bomb);
+				else if (HasTNT[client])        CreateItem(client, Bomb);
+			}
 			case 4:
 			{
-				// Value 4 means random item. So get random item then
+				// Value 4 means random item. So get random integer between item indexes
 				switch (GetRandomInt(Healthkit, Bomb))
 				{
-					// And check avaliability again
-					case Healthkit: if (HasHealthkit[client]) CreateItem(client, Healthkit);
-					case Ammobox:   if (HasAmmoBox[client])   CreateItem(client, Ammobox);
-					case Bomb:      if (HasTNT[client])       CreateItem(client, Bomb);
+					// Same algorithm here
+					case Healthkit:
+					{
+						if (!GetConVarBool(alivecheck)) CreateItem(client, Healthkit);
+						else if (HasHealthkit[client])  CreateItem(client, Healthkit);
+					}
+					case Ammobox:
+					{
+						if (!GetConVarBool(alivecheck)) CreateItem(client, Ammobox);
+						else if (HasAmmoBox[client])    CreateItem(client, Ammobox);
+					}
+
+					// Obviously for all items
+					case Bomb:
+					{
+						if (!GetConVarBool(alivecheck)) CreateItem(client, Bomb);
+						else if (HasTNT[client])        CreateItem(client, Bomb);
+					}
 				}
 			}
 		}
@@ -234,29 +274,39 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 				// Menu mode is enabled
 				if (GetConVarBool(menumode))
 				{
+					// initialize strings because I cant translate items directly in a panel
+					decl String:szMenuTitle[64], String:szHealthkit[64], String:szAmmoBox[64], String:szTNT[64], String:szClose[64];
+
+					// Format a string into translated one
+					Format(szMenuTitle, sizeof(szMenuTitle), "%t", "Menu title");
+					Format(szHealthkit, sizeof(szHealthkit), "%t", "Healthkit");
+					Format(szAmmoBox,   sizeof(szAmmoBox),   "%t", "Ammobox");
+					Format(szTNT,       sizeof(szTNT),       "%t", "TNT");
+					Format(szClose,     sizeof(szClose),     "%t", "Close");
+
 					// Panel is much better than menu
 					new Handle:dropmenu = CreatePanel();
 
 					// It's like SetMenuTitle for menus, but we're using panels you know
-					DrawPanelText(dropmenu, "Choose an item to drop:");
+					DrawPanelText(dropmenu, szMenuTitle);
 
 					// If client have an item, allow client to select it, otherwise just draw as disabled item
 					if (HasHealthkit[client])
-						 DrawPanelItem(dropmenu, "Healthkit");
-					else DrawPanelItem(dropmenu, "Healthkit", ITEMDRAW_DISABLED);
+						 DrawPanelItem(dropmenu, szHealthkit);
+					else DrawPanelItem(dropmenu, szHealthkit, ITEMDRAW_DISABLED);
 					if (HasAmmoBox[client])
-						 DrawPanelItem(dropmenu, "Ammo box");
-					else DrawPanelItem(dropmenu, "Ammo box", ITEMDRAW_DISABLED);
+						 DrawPanelItem(dropmenu, szAmmoBox);
+					else DrawPanelItem(dropmenu, szAmmoBox, ITEMDRAW_DISABLED);
 					if (HasTNT[client])
-						 DrawPanelItem(dropmenu, "TNT");
-					else DrawPanelItem(dropmenu, "TNT", ITEMDRAW_DISABLED);
+						 DrawPanelItem(dropmenu, szTNT);
+					else DrawPanelItem(dropmenu, szTNT, ITEMDRAW_DISABLED);
 
 					// Just a spacer
 					DrawPanelItem(dropmenu, NULL_STRING, ITEMDRAW_SPACER);
 
 					// Since its a panel, its dont have 'Exit' or 'Close' items - create it right now
 					SetPanelCurrentKey(dropmenu, 10);
-					DrawPanelItem(dropmenu, "Close", ITEMDRAW_CONTROL);
+					DrawPanelItem(dropmenu, szClose, ITEMDRAW_CONTROL);
 
 					// Send panel to client and draw it until client close it
 					SendPanelToClient(dropmenu, client, DropMenuHandler, MENU_TIME_FOREVER);
@@ -264,6 +314,7 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 					// Fuck invalid handles
 					CloseHandle(dropmenu);
 				}
+
 				// Menu mode is disabled
 				else
 				{
@@ -279,7 +330,15 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 			}
 
 			// Notice client if 'dropammo' command used twice for more than X seconds depends on cooldown value
-			else PrintHintText(client, "You are not allowed to drop item for %i more seconds!", GetConVarInt(cooldowntime) - LastDropTime);
+			else
+			{
+				// Cooldown feature
+				decl String:szCooldown[128];
+				Format(szCooldown, sizeof(szCooldown), "%t", "Cooldown", GetConVarInt(cooldowntime) - LastDropTime);
+
+				// Draw warning message in a middle of the screen
+				PrintHintText(client, szCooldown);
+			}
 		}
 
 		// Healthkit, ammo or TNT features is disabled - use dropcommand as usual
@@ -321,20 +380,17 @@ CreateItem(client, index)
 		// Creates a prop_physics_override entity, but does not spawn it yet
 		new item = CreateEntityByName("prop_physics_override");
 
-		// Let's disable item collision agains player. Plugin will enable it again & hook item touch in same time
-		SetEntProp(item, Prop_Send, "m_CollisionGroup", true);
-
 		switch (index)
 		{
-			// Now we can spawn an entity (item) depends on unique item index
-			case Healthkit: CreateHealthkit(item, client);
-			case Ammobox:   CreateAmmoBox(item,   client);
-			case Bomb:      CreateTNT(item,       client);
+			// Now we can spawn an entity (item) depends on unique index
+			case Healthkit: SpawnHealthkit(item, client);
+			case Ammobox:   SpawnAmmoBox(item,   client);
+			case Bomb:      SpawnTNT(item,       client);
 		}
 	}
 
-	// Otherwise dont spawn any more items to prevent NoFreeEdicts error (i.e. server crash) and disable the plugin
-	else SetFailState("Entity limit is nearly reached (%i/%i max.). Unloading plugin till map change.", GetEntityCount(), GetMaxEntities());
+	// Otherwise dont spawn any more items to prevent Engine error: ED_Alloc: no free edicts (server crash) and disable the plugin
+	else SetFailState("Plugin unloaded. Entity limit is nearly reached (%i out of %i max.). Please switch or reload the map!", GetEntityCount(), GetMaxEntities());
 }
 
 /* IsValidClient()
