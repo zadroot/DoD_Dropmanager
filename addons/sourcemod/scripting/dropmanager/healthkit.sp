@@ -169,7 +169,7 @@ public Action:HookHealthKitTouch(Handle:timer, any:healthkit)
 	if (IsValidEntity(healthkit))
 	{
 		// Change to proper collision group for making healthkit pickup'ble
-		SDKHook(healthkit, SDKHook_StartTouch, OnHealthKitTouched);
+		SDKHook(healthkit, SDKHook_Touch, OnHealthKitTouched);
 	}
 }
 
@@ -193,7 +193,7 @@ RemoveHealthkit(healthkit)
 	if (IsValidEntity(healthkit))
 	{
 		// Entity removed - unhook touching
-		SDKUnhook(healthkit, SDKHook_StartTouch, OnHealthKitTouched);
+		SDKUnhook(healthkit, SDKHook_Touch, OnHealthKitTouched);
 
 		decl String:model[PLATFORM_MAX_PATH];
 		Format(model, PLATFORM_MAX_PATH, NULL_STRING);

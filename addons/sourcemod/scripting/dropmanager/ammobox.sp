@@ -164,7 +164,7 @@ public Action:HookAmmoBoxTouch(Handle:timer, any:ammobox)
 	if (IsValidEntity(ammobox))
 	{
 		// Possibly memory leak issue should be corrected in the OnStartTouch entity hook
-		SDKHook(ammobox, SDKHook_StartTouch, OnAmmoBoxTouched);
+		SDKHook(ammobox, SDKHook_Touch, OnAmmoBoxTouched);
 	}
 }
 
@@ -188,7 +188,7 @@ RemoveAmmoBox(ammobox)
 {
 	if (IsValidEntity(ammobox))
 	{
-		SDKUnhook(ammobox, SDKHook_StartTouch, OnAmmoBoxTouched);
+		SDKUnhook(ammobox, SDKHook_Touch, OnAmmoBoxTouched);
 
 		decl String:model[PLATFORM_MAX_PATH];
 		Format(model, PLATFORM_MAX_PATH, NULL_STRING);

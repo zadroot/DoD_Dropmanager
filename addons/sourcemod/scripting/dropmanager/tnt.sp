@@ -111,7 +111,7 @@ SpawnTNT(tnt, client)
  * --------------------------------------------------------------------------------- */
 public Action:HookBombTouch(Handle:timer, any:tnt)
 {
-	if (IsValidEntity(tnt)) SDKHook(tnt, SDKHook_StartTouch, OnBombTouched);
+	if (IsValidEntity(tnt)) SDKHook(tnt, SDKHook_Touch, OnBombTouched);
 }
 
 /* RemoveDroppedTnT()
@@ -133,7 +133,7 @@ RemoveTNT(tnt)
 	// Make sure that entity is valid
 	if (IsValidEntity(tnt))
 	{
-		SDKUnhook(tnt, SDKHook_StartTouch, OnBombTouched);
+		SDKUnhook(tnt, SDKHook_Touch, OnBombTouched);
 
 		// Removes this entity and all its children from the world
 		decl String:model[PLATFORM_MAX_PATH];

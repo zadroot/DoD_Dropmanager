@@ -1,0 +1,27 @@
+"Phrases"
+{
+	"Menu title"
+	{
+		"de"		"Wähle einen Gegenstand den du hinwerfen willst:"
+	}
+	"Healthkit"
+	{
+		"de"		"Medizinpaket" 
+	}
+	"Ammobox"
+	{
+		"de"		"Munition"
+	}
+	"TNT"
+	{
+		"de"		"TNT"
+	}
+	"Close"
+	{
+		"de"		"Schliessen"
+	}
+	"Cooldown"
+	{
+		"de"		"Du darfst keinen Gegenstand mehr wegwerfen fur {1} Sekunden!"
+	}
+}
