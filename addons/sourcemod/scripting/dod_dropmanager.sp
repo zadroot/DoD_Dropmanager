@@ -95,7 +95,7 @@ public OnPluginStart()
 	healthkithealth    = CreateConVar("dod_drophealthkit_addhealth",  "50", "Determines amount of health to add to a player which picking up a healthkit", FCVAR_PLUGIN, true, 0.0, true, 100.0);
 	healthkitselfheal  = CreateConVar("dod_drophealthkit_selfheal",   "30", "Determines amount of player's health to allow heal himself using own healthkit", FCVAR_PLUGIN, true, 0.0, true, 99.0);
 	healthkitteamcolor = CreateConVar("dod_drophealthkit_teamcolor",  "0",  "Whether or not colorize dropped healthkit depends on player's team", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	healthkitcustom    = CreateConVar("dod_drophealthkit_newmodel",   "1",  "Whether or not use custom model for healthkit\nDo not change until map change!", FCVAR_PLUGIN, true, 0.0, true, 1.0);
+	healthkitcustom    = CreateConVar("dod_drophealthkit_newmodel",   "0",  "Whether or not use custom model for healthkit\nDo not change until map change!", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 
 	ammopickuprule     = CreateConVar("dod_dropammobox_pickuprule",   "1",  "Determines who can pick up dropped ammo box:\n0 = Everyone\n1 = Only teammates\n2 = Only enemies", FCVAR_PLUGIN, true, 0.0, true, 2.0);
 	ammorealism        = CreateConVar("dod_dropammobox_realism",      "1",  "Whether or not use 'realism' mode\nIt means player may share ammo of primary weapons until no ammo left", FCVAR_PLUGIN, true, 0.0, true, 1.0);
