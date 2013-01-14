@@ -4,6 +4,10 @@
 	{
 		"fr"		"Choisissez un objet a lacher:"
 	}
+	"Full hp"
+	{
+		"fr"		"Vous avez tous vos HP"
+	}
 	"Healthkit"
 	{
 		"fr"		"Kit de soins"

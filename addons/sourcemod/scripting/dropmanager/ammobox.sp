@@ -37,11 +37,10 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 {
 	if (IsValidClient(client) && IsValidEntity(ammobox))
 	{
-		decl Float:vecOrigin[3];
-		GetClientEyePosition(client, vecOrigin);
+		decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
 
 		// Make sure client is having a weapon, because we wont equip ammo for unexist weapon
-		if (GetPlayerWeaponSlot(client, Slot_Primary) != -1)
+		if (IsValidEntity(GetPlayerWeaponSlot(client, slot:Primary)))
 		{
 			// When player just touched his own ammo box
 			if (AmmoBoxOwner[ammobox] == client && HasAmmoBox[client] == false)
@@ -88,9 +87,9 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 SpawnAmmoBox(ammobox, client)
 {
 	// Make sure that weapon is valid
-	if (GetPlayerWeaponSlot(client, Slot_Primary) != -1)
+	if (IsValidEntity(GetPlayerWeaponSlot(client, slot:Primary)))
 	{
-		new team = GetClientTeam(client);
+		new Teams:team = Teams:GetClientTeam(client);
 
 		// Store origin, angles and velocity to spawn ammo box correctly in a front of player
 		decl Float:origin[3], Float:angles[3], Float:velocity[3];
@@ -100,20 +99,20 @@ SpawnAmmoBox(ammobox, client)
 		NormalizeVector(velocity, velocity);
 
 		// Scale vector to a given value
-		ScaleVector(velocity, 400.0);
+		ScaleVector(velocity, 350.0);
 
 		// Set ammo box model and ammo box team depends on team
-		switch (team)
+		switch (Teams:team)
 		{
-			case DODTeam_Allies:
+			case Allies:
 			{
 				DispatchKeyValue(ammobox, "model", AlliesAmmoModel);
-				SetEntProp(ammobox, Prop_Send, "m_nSkin", DODTeam_Allies);
+				SetEntProp(ammobox, Prop_Send, "m_nSkin", Teams:Allies);
 			}
-			case DODTeam_Axis:
+			case Axis:
 			{
 				DispatchKeyValue(ammobox, "model", AxisAmmoModel);
-				SetEntProp(ammobox, Prop_Send, "m_nSkin", DODTeam_Axis);
+				SetEntProp(ammobox, Prop_Send, "m_nSkin", Teams:Axis);
 			}
 		}
 
@@ -122,35 +121,35 @@ SpawnAmmoBox(ammobox, client)
 		{
 			SetEntProp(ammobox, Prop_Send, "m_usSolidFlags",  152);
 			SetEntProp(ammobox, Prop_Send, "m_CollisionGroup", 11);
+
+			if (GetClientHealth(client) > 1)
+			{
+				origin[2] += 45.0;
+				TeleportEntity(ammobox, origin, angles, velocity);
+			}
+
+			// Client is no longer alive
+			else
+			{
+				// Then change value for origin and spawn ammo box just around a weapon
+				origin[2] += 5.0;
+				TeleportEntity(ammobox, origin, NULL_VECTOR, NULL_VECTOR);
+			}
+
+			// Hook entity touch (in our case is ammobox)
+			CreateTimer(0.5, HookAmmoBoxTouch, ammobox);
+
+			lifetimer_ammo[ammobox] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedAmmoBox, ammobox, TIMER_FLAG_NO_MAPCHANGE);
+
+			// Use voice command if this feature is enabled
+			if (GetConVarBool(ammovoice)) ClientCommand(client, "voice_takeammo");
+
+			// Realism mode is enabled > recude amount of ammo depends on clipsize value (drop mode)
+			if (GetConVarBool(ammorealism)) PerformAmmunition(client, ammotype:drop);
+			else if (GetClientHealth(client) > 1) AmmoBoxOwner[ammobox] = client;
+
+			HasAmmoBox[client] = false;
 		}
-
-		if (GetClientHealth(client) > 1)
-		{
-			origin[2] += 55.0;
-			TeleportEntity(ammobox, origin, angles, velocity);
-		}
-
-		// Client is no longer alive
-		else
-		{
-			// Then change value for origin and spawn ammo box just around a weapon
-			origin[2] += 5.0;
-			TeleportEntity(ammobox, origin, NULL_VECTOR, NULL_VECTOR);
-		}
-
-		// Hook entity touch (in our case is ammobox)
-		CreateTimer(0.5, HookAmmoBoxTouch, ammobox);
-
-		lifetimer_ammo[ammobox] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedAmmoBox, ammobox, TIMER_FLAG_NO_MAPCHANGE);
-
-		// Use voice command if this feature is enabled
-		if (GetConVarBool(ammovoice)) ClientCommand(client, "voice_takeammo");
-
-		// Realism mode is enabled > recude amount of ammo depends on clipsize value (drop mode)
-		if (GetConVarBool(ammorealism)) PerformAmmunition(client, ammotype:drop);
-		else if (GetClientHealth(client) > 1) AmmoBoxOwner[ammobox] = client;
-
-		HasAmmoBox[client] = false;
 	}
 }
 
@@ -161,11 +160,7 @@ SpawnAmmoBox(ammobox, client)
 public Action:HookAmmoBoxTouch(Handle:timer, any:ammobox)
 {
 	// Make sure ammo box entity is valid
-	if (IsValidEntity(ammobox))
-	{
-		// Possibly memory leak issue should be corrected in the OnStartTouch entity hook
-		SDKHook(ammobox, SDKHook_Touch, OnAmmoBoxTouched);
-	}
+	if (IsValidEntity(ammobox)) SDKHook(ammobox, SDKHook_Touch, OnAmmoBoxTouched);
 }
 
 /* RemoveDroppedAmmoBox()
@@ -188,8 +183,6 @@ RemoveAmmoBox(ammobox)
 {
 	if (IsValidEntity(ammobox))
 	{
-		SDKUnhook(ammobox, SDKHook_Touch, OnAmmoBoxTouched);
-
 		decl String:model[PLATFORM_MAX_PATH];
 		Format(model, PLATFORM_MAX_PATH, NULL_STRING);
 		GetEntPropString(ammobox, Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);
@@ -206,14 +199,13 @@ RemoveAmmoBox(ammobox)
 PerformAmmunition(client, ammotype:index)
 {
 	// Perform ammunition only for primary weapon
-	new PrimaryWeapon = GetPlayerWeaponSlot(client, Slot_Primary);
+	new PrimaryWeapon = GetPlayerWeaponSlot(client, slot:Primary);
 
 	// Now make sure weapon is valid
 	if (IsValidEntity(PrimaryWeapon))
 	{
 		// Retrieve a weapon classname
-		decl String:Weapon[32];
-		GetEdictClassname(PrimaryWeapon, Weapon, sizeof(Weapon));
+		decl String:Weapon[32]; GetEdictClassname(PrimaryWeapon, Weapon, sizeof(Weapon));
 
 		// Prepare weapon id. Needed to find weapon, ammo & clipsize from string tables
 		new WeaponID = -1;

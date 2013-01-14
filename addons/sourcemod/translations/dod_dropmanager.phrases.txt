@@ -4,6 +4,10 @@
 	{
 		"en"		"Choose an item to drop:"
 	}
+	"Full hp"
+	{
+		"en"		"Now you have full health"
+	}
 	"Healthkit"
 	{
 		"en"		"Healthkit"

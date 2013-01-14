@@ -15,11 +15,10 @@ public Action:OnBombTouched(tnt, client)
 {
 	if (IsValidClient(client) && IsValidEntity(tnt))
 	{
-		decl Float:vecOrigin[3];
-		GetClientEyePosition(client, vecOrigin);
+		decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
 
 		// If player is dont have a bomb (weapon in 4th slot) - perform TNT equip
-		if (GetPlayerWeaponSlot(client, Slot_Bomb) == -1)
+		if (!IsValidEntity(GetPlayerWeaponSlot(client, slot:Explosive)))
 		{
 			new pickuprule = GetConVarInt(tntpickuprule);
 			new clteam     = GetClientTeam(client);
@@ -55,7 +54,7 @@ public Action:OnBombTouched(tnt, client)
 SpawnTNT(tnt, client)
 {
 	// Get bomb slot
-	new bomb = GetPlayerWeaponSlot(client, Slot_Bomb);
+	new bomb = GetPlayerWeaponSlot(client, slot:Explosive);
 
 	if (IsValidEntity(bomb))
 	{
@@ -71,37 +70,37 @@ SpawnTNT(tnt, client)
 		GetAngleVectors(angles, velocity, NULL_VECTOR, NULL_VECTOR);
 
 		NormalizeVector(velocity, velocity);
-		ScaleVector(velocity, 450.0);
+		ScaleVector(velocity, 370.0);
 
 		// Set TNT model and spawn it
 		DispatchKeyValue(tnt, "model", TNTModel);
 
 		if (DispatchSpawn(tnt))
 		{
-			SetEntProp(tnt, Prop_Send, "m_nSkin", GetClientTeam(client));
+			SetEntProp(tnt, Prop_Send, "m_nSkin", Teams:GetClientTeam(client));
 			SetEntProp(tnt, Prop_Send, "m_usSolidFlags",  152);
 			SetEntProp(tnt, Prop_Send, "m_CollisionGroup", 11);
+
+			if (GetClientHealth(client) > 1 && BombsDropped[client] < GetConVarInt(tntmaxdrops))
+			{
+				origin[2] += 45.0;
+				TeleportEntity(tnt, origin, angles, velocity);
+
+				BombsDropped[client]++;
+				RemoveWeapon(client, bomb);
+			}
+			else if (GetClientHealth(client) < 1)
+			{
+				origin[2] += 5.0;
+				TeleportEntity(tnt, origin, NULL_VECTOR, NULL_VECTOR);
+			}
+
+			CreateTimer(0.5, HookBombTouch, tnt);
+
+			// Create timer depends on lifetime value to remove bomb from map after X seconds
+			lifetimer_tnt[tnt] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedTnT, tnt, TIMER_FLAG_NO_MAPCHANGE);
+			HasTNT[client] = false;
 		}
-
-		if (GetClientHealth(client) > 1 && BombsDropped[client] < GetConVarInt(tntmaxdrops))
-		{
-			origin[2] += 55.0;
-			TeleportEntity(tnt, origin, angles, velocity);
-
-			BombsDropped[client]++;
-			RemoveWeapon(client, bomb);
-		}
-		else if (GetClientHealth(client) < 1)
-		{
-			origin[2] += 5.0;
-			TeleportEntity(tnt, origin, NULL_VECTOR, NULL_VECTOR);
-		}
-
-		CreateTimer(0.5, HookBombTouch, tnt);
-
-		// Create timer depends on lifetime value to remove bomb from map after X seconds
-		lifetimer_tnt[tnt] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedTnT, tnt, TIMER_FLAG_NO_MAPCHANGE);
-		HasTNT[client] = false;
 	}
 }
 
@@ -133,8 +132,6 @@ RemoveTNT(tnt)
 	// Make sure that entity is valid
 	if (IsValidEntity(tnt))
 	{
-		SDKUnhook(tnt, SDKHook_Touch, OnBombTouched);
-
 		// Removes this entity and all its children from the world
 		decl String:model[PLATFORM_MAX_PATH];
 		Format(model, PLATFORM_MAX_PATH, NULL_STRING);

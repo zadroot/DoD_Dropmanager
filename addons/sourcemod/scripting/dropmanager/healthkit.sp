@@ -38,8 +38,7 @@ public Action:OnHealthKitTouched(healthkit, client)
 	if (IsValidClient(client) && IsValidEntity(healthkit))
 	{
 		// When storing make sure you don't include the index then returns the client's eye position
-		decl Float:vecOrigin[3];
-		GetClientEyePosition(client, vecOrigin);
+		decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
 
 		// If healthkit's owner just touched healthkit (and had more health than defined in selfheal) equip healthkit back
 		if (HealthkitOwner[healthkit] == client && GetClientHealth(client) > GetConVarInt(healthkitselfheal))
@@ -77,12 +76,12 @@ public Action:OnHealthKitTouched(healthkit, client)
 				if (health + healthkitadd >= MAXHEALTH)
 				{
 					SetEntityHealth(client, MAXHEALTH);
-					PrintCenterText(client, "100 hp");
+					PrintCenterText(client, "%t", "Full hp");
 				}
 				else
 				{
 					// Otherwise add healing value to current client health, and notice about that in middle of a screen
-					SetEntityHealth(client, health + healthkitadd);
+					SetEntityHealth(client,  health + healthkitadd);
 					PrintCenterText(client, "+%i hp", healthkitadd);
 				}
 
@@ -104,7 +103,7 @@ public Action:OnHealthKitTouched(healthkit, client)
 SpawnHealthkit(healthkit, client)
 {
 	// Needed to get team for pickuprule and colorize stuff
-	new team = GetClientTeam(client);
+	new Teams:team = Teams:GetClientTeam(client);
 
 	decl Float:origin[3], Float:angles[3], Float:velocity[3];
 	GetClientAbsOrigin(client, origin);
@@ -113,7 +112,7 @@ SpawnHealthkit(healthkit, client)
 
 	// Normalize vector
 	NormalizeVector(velocity, velocity);
-	ScaleVector(velocity, 450.0);
+	ScaleVector(velocity, 360.0);
 
 	// Set healthkit model
 	if (GetConVarBool(healthkitcustom))
@@ -122,42 +121,41 @@ SpawnHealthkit(healthkit, client)
 
 	if (DispatchSpawn(healthkit))
 	{
-		SetEntProp(healthkit, Prop_Send, "m_nSkin", team);
+		SetEntProp(healthkit, Prop_Send, "m_nSkin", Teams:team);
 		SetEntProp(healthkit, Prop_Send, "m_usSolidFlags",  152);
 		SetEntProp(healthkit, Prop_Send, "m_CollisionGroup", 11);
-	}
 
-	// If player is alive, teleport entity using stored origin, angles and velocity
-	if (GetClientHealth(client) > 1)
-	{
-		origin[2] += 55.0;
-		TeleportEntity(healthkit, origin, angles, velocity);
-
-		// Make client as a dropped healthkit owner
-		HealthkitOwner[healthkit] = client;
-
-		// Also do a stuff that client dont have a healthkit anymore
-		HasHealthkit[client]      = false;
-	}
-	else
-	{
-		origin[2] += 5.0;
-		TeleportEntity(healthkit, origin, NULL_VECTOR, NULL_VECTOR);
-	}
-
-	// Colorize a healthkit depends on team if needed
-	if (GetConVarBool(healthkitteamcolor))
-	{
-		switch (team)
+		// If player is alive, teleport entity using stored origin, angles and velocity
+		if (GetClientHealth(client) > 1)
 		{
-			case DODTeam_Allies: SetEntityRenderColor(healthkit, 128, 255, 128, 255);
-			case DODTeam_Axis:   SetEntityRenderColor(healthkit, 255, 128, 128, 255);
+			origin[2] += 45.0;
+			TeleportEntity(healthkit, origin, angles, velocity);
+
+			// Make client as a dropped healthkit owner
+			HealthkitOwner[healthkit] = client;
+
+			// Also do a stuff that client dont have a healthkit anymore
+			HasHealthkit[client]      = false;
 		}
+		else
+		{
+			origin[2] += 5.0;
+			TeleportEntity(healthkit, origin, NULL_VECTOR, NULL_VECTOR);
+		}
+
+		// Colorize a healthkit depends on team if needed
+		if (GetConVarBool(healthkitteamcolor))
+		{
+			switch (Teams:team)
+			{
+				case Allies: SetEntityRenderColor(healthkit, 128, 255, 128, 255);
+				case Axis:   SetEntityRenderColor(healthkit, 255, 128, 128, 255);
+			}
+		}
+
+		CreateTimer(0.5, HookHealthKitTouch, healthkit);
+		lifetimer_healthkit[healthkit] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedHealthKit, healthkit);
 	}
-
-	CreateTimer(0.5, HookHealthKitTouch, healthkit);
-
-	lifetimer_healthkit[healthkit] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedHealthKit, healthkit);
 }
 
 /* HookHealthKitTouch()
@@ -166,11 +164,7 @@ SpawnHealthkit(healthkit, client)
  * --------------------------------------------------------------------------------- */
 public Action:HookHealthKitTouch(Handle:timer, any:healthkit)
 {
-	if (IsValidEntity(healthkit))
-	{
-		// Change to proper collision group for making healthkit pickup'ble
-		SDKHook(healthkit, SDKHook_Touch, OnHealthKitTouched);
-	}
+	if (IsValidEntity(healthkit)) SDKHook(healthkit, SDKHook_Touch, OnHealthKitTouched);
 }
 
 /* RemoveDroppedHealthKit()
@@ -192,9 +186,6 @@ RemoveHealthkit(healthkit)
 {
 	if (IsValidEntity(healthkit))
 	{
-		// Entity removed - unhook touching
-		SDKUnhook(healthkit, SDKHook_Touch, OnHealthKitTouched);
-
 		decl String:model[PLATFORM_MAX_PATH];
 		Format(model, PLATFORM_MAX_PATH, NULL_STRING);
 		GetEntPropString(healthkit, Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);

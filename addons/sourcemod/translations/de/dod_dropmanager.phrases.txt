@@ -4,6 +4,10 @@
 	{
 		"de"		"Wähle einen Gegenstand den du hinwerfen willst:"
 	}
+	"Full hp"
+	{
+		"de"		"Du hast nun volle health"
+	}
 	"Healthkit"
 	{
 		"de"		"Medizinpaket" 
