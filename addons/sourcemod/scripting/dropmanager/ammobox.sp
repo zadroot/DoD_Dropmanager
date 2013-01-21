@@ -138,7 +138,7 @@ SpawnAmmoBox(ammobox, client)
 
 			// Realism mode is enabled > recude amount of ammo depends on clipsize value (drop mode)
 			if (GetConVar[AmmoBox_Realism][Value]) PerformAmmunition(client, ammotype:drop);
-			else if (GetClientHealth(client) > 1)  AmmoBoxOwner[ammobox] = client;
+			else if (GetClientHealth(client) > 0)  AmmoBoxOwner[ammobox] = client;
 
 			HasAmmoBox[client] = false;
 		}
