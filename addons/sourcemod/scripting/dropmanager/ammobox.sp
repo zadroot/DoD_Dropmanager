@@ -7,16 +7,10 @@ enum ammotype
 }
 
 new Handle:lifetimer_ammo[MAXENTITIES + 1],
-	Handle:allowammobox,
-	Handle:ammopickuprule,
-	Handle:ammosize,
-	Handle:ammorealism,
-	Handle:ammovoice;
-
-new bool:HasAmmoBox[DOD_MAXPLAYERS + 1],
+	AmmoBoxOwner[MAXENTITIES + 1],
+	bool:HasAmmoBox[DOD_MAXPLAYERS + 1],
 	ammo_offset[]   = { 16, 20, 32, 32, 36, 32, 28, 20,  40,  44, 48, 48},
 	ammo_clipsize[] = { 8,   5, 30, 30, 20, 30,  5,  5, 150, 250, 1,   1},
-	AmmoBoxOwner[MAXENTITIES + 1],
 	m_iAmmo;
 
 new const
@@ -37,11 +31,11 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 {
 	if (IsValidClient(client) && IsValidEntity(ammobox))
 	{
-		decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
-
 		// Make sure client is having a weapon, because we wont equip ammo for unexist weapon
-		if (IsValidEntity(GetPlayerWeaponSlot(client, slot:Primary)))
+		if (IsValidEntity(GetPlayerWeaponSlot(client, SLOT_PRIMARY)))
 		{
+			decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
+
 			// When player just touched his own ammo box
 			if (AmmoBoxOwner[ammobox] == client && HasAmmoBox[client] == false)
 			{
@@ -56,7 +50,7 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 				return Plugin_Handled;
 			}
 
-			new pickuprule = GetConVarInt(ammopickuprule);
+			new pickuprule = GetConVar[AmmoBox_PickupRule][Value];
 			new clteam     = GetClientTeam(client);
 			new ammoteam   = GetEntProp(ammobox, Prop_Send, "m_nSkin");
 
@@ -87,10 +81,8 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 SpawnAmmoBox(ammobox, client)
 {
 	// Make sure that weapon is valid
-	if (IsValidEntity(GetPlayerWeaponSlot(client, slot:Primary)))
+	if (IsValidEntity(GetPlayerWeaponSlot(client, SLOT_PRIMARY)))
 	{
-		new Teams:team = Teams:GetClientTeam(client);
-
 		// Store origin, angles and velocity to spawn ammo box correctly in a front of player
 		decl Float:origin[3], Float:angles[3], Float:velocity[3];
 		GetClientAbsOrigin(client, origin);
@@ -102,7 +94,7 @@ SpawnAmmoBox(ammobox, client)
 		ScaleVector(velocity, 350.0);
 
 		// Set ammo box model and ammo box team depends on team
-		switch (Teams:team)
+		switch (GetClientTeam(client))
 		{
 			case Allies:
 			{
@@ -122,7 +114,7 @@ SpawnAmmoBox(ammobox, client)
 			SetEntProp(ammobox, Prop_Send, "m_usSolidFlags",  152);
 			SetEntProp(ammobox, Prop_Send, "m_CollisionGroup", 11);
 
-			if (GetClientHealth(client) > 1)
+			if (GetClientHealth(client) > 0)
 			{
 				origin[2] += 45.0;
 				TeleportEntity(ammobox, origin, angles, velocity);
@@ -139,14 +131,14 @@ SpawnAmmoBox(ammobox, client)
 			// Hook entity touch (in our case is ammobox)
 			CreateTimer(0.5, HookAmmoBoxTouch, ammobox);
 
-			lifetimer_ammo[ammobox] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedAmmoBox, ammobox, TIMER_FLAG_NO_MAPCHANGE);
+			lifetimer_ammo[ammobox] = CreateTimer(GetConVar[ItemLifeTime][Value], RemoveDroppedAmmoBox, ammobox, TIMER_FLAG_NO_MAPCHANGE);
 
 			// Use voice command if this feature is enabled
-			if (GetConVarBool(ammovoice)) ClientCommand(client, "voice_takeammo");
+			if (GetConVar[AmmoBox_UseVoice][Value]) ClientCommand(client, "voice_takeammo");
 
 			// Realism mode is enabled > recude amount of ammo depends on clipsize value (drop mode)
-			if (GetConVarBool(ammorealism)) PerformAmmunition(client, ammotype:drop);
-			else if (GetClientHealth(client) > 1) AmmoBoxOwner[ammobox] = client;
+			if (GetConVar[AmmoBox_Realism][Value]) PerformAmmunition(client, ammotype:drop);
+			else if (GetClientHealth(client) > 1)  AmmoBoxOwner[ammobox] = client;
 
 			HasAmmoBox[client] = false;
 		}
@@ -199,7 +191,7 @@ RemoveAmmoBox(ammobox)
 PerformAmmunition(client, ammotype:index)
 {
 	// Perform ammunition only for primary weapon
-	new PrimaryWeapon = GetPlayerWeaponSlot(client, slot:Primary);
+	new PrimaryWeapon = GetPlayerWeaponSlot(client, SLOT_PRIMARY);
 
 	// Now make sure weapon is valid
 	if (IsValidEntity(PrimaryWeapon))
@@ -228,7 +220,7 @@ PerformAmmunition(client, ammotype:index)
 			new currammo   = GetEntData(client, WeaponAmmo);
 
 			// Get clip size value
-			new clipsize   = GetConVarInt(ammosize);
+			new clipsize   = GetConVar[AmmoBox_ClipSize][Value];
 
 			// Get max clipsize of weapon and multiply to clipsize value
 			new newammo    = ammo_clipsize[WeaponID] * clipsize;
@@ -239,7 +231,7 @@ PerformAmmunition(client, ammotype:index)
 				// Checking current ammo size
 				case check:
 				{
-					if (GetConVarBool(ammorealism))
+					if (GetConVar[AmmoBox_Realism][Value])
 					{
 						// If ammo which should be dropped is more than current ammo, disable ammo dropping
 						if (newammo > currammo) HasAmmoBox[client] = false;

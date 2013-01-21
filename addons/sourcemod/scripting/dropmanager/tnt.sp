@@ -1,10 +1,8 @@
 // ====[ VARIABLES ]================================================================
 new Handle:lifetimer_tnt[MAXENTITIES + 1],
-	Handle:allowtnt,
-	Handle:tntpickuprule,
-	Handle:tntmaxdrops;
+	BombsDropped[DOD_MAXPLAYERS + 1],
+	bool:HasTNT[DOD_MAXPLAYERS + 1];
 
-new bool:HasTNT[DOD_MAXPLAYERS + 1], BombsDropped[DOD_MAXPLAYERS + 1];
 new const String:TNTModel[] = { "models/weapons/w_tnt.mdl" }, String:TNTSound[] = { "weapons/c4_pickup.wav" };
 
 /* OnBombTouched()
@@ -15,12 +13,12 @@ public Action:OnBombTouched(tnt, client)
 {
 	if (IsValidClient(client) && IsValidEntity(tnt))
 	{
-		decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
-
 		// If player is dont have a bomb (weapon in 4th slot) - perform TNT equip
-		if (!IsValidEntity(GetPlayerWeaponSlot(client, slot:Explosive)))
+		if (!IsValidEntity(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE)))
 		{
-			new pickuprule = GetConVarInt(tntpickuprule);
+			decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
+
+			new pickuprule = GetConVar[TNT_PickupRule][Value];
 			new clteam     = GetClientTeam(client);
 			new bombteam   = GetEntProp(tnt, Prop_Send, "m_nSkin");
 
@@ -41,6 +39,7 @@ public Action:OnBombTouched(tnt, client)
 
 				// Client has a TNT right now
 				HasTNT[client] = true;
+				return Plugin_Handled;
 			}
 		}
 	}
@@ -54,7 +53,7 @@ public Action:OnBombTouched(tnt, client)
 SpawnTNT(tnt, client)
 {
 	// Get bomb slot
-	new bomb = GetPlayerWeaponSlot(client, slot:Explosive);
+	new bomb = GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE);
 
 	if (IsValidEntity(bomb))
 	{
@@ -81,7 +80,7 @@ SpawnTNT(tnt, client)
 			SetEntProp(tnt, Prop_Send, "m_usSolidFlags",  152);
 			SetEntProp(tnt, Prop_Send, "m_CollisionGroup", 11);
 
-			if (GetClientHealth(client) > 1 && BombsDropped[client] < GetConVarInt(tntmaxdrops))
+			if (GetClientHealth(client) > 0 && BombsDropped[client] < GetConVar[TNT_DropLimit][Value])
 			{
 				origin[2] += 45.0;
 				TeleportEntity(tnt, origin, angles, velocity);
@@ -89,7 +88,7 @@ SpawnTNT(tnt, client)
 				BombsDropped[client]++;
 				RemoveWeapon(client, bomb);
 			}
-			else if (GetClientHealth(client) < 1)
+			else if (GetClientHealth(client) <= 0)
 			{
 				origin[2] += 5.0;
 				TeleportEntity(tnt, origin, NULL_VECTOR, NULL_VECTOR);
@@ -98,8 +97,8 @@ SpawnTNT(tnt, client)
 			CreateTimer(0.5, HookBombTouch, tnt);
 
 			// Create timer depends on lifetime value to remove bomb from map after X seconds
-			lifetimer_tnt[tnt] = CreateTimer(GetConVarFloat(itemlifetime), RemoveDroppedTnT, tnt, TIMER_FLAG_NO_MAPCHANGE);
-			HasTNT[client] = false;
+			lifetimer_tnt[tnt] = CreateTimer(GetConVar[ItemLifeTime][Value], RemoveDroppedTNT, tnt, TIMER_FLAG_NO_MAPCHANGE);
+			HasTNT[client]     = false;
 		}
 	}
 }
@@ -113,11 +112,11 @@ public Action:HookBombTouch(Handle:timer, any:tnt)
 	if (IsValidEntity(tnt)) SDKHook(tnt, SDKHook_Touch, OnBombTouched);
 }
 
-/* RemoveDroppedTnT()
+/* RemoveDroppedTNT()
  *
  * Removes dropped TNT after X seconds on a map.
  * --------------------------------------------------------------------------------- */
-public Action:RemoveDroppedTnT(Handle:timer, any:tnt)
+public Action:RemoveDroppedTNT(Handle:timer, any:tnt)
 {
 	lifetimer_tnt[tnt] = INVALID_HANDLE;
 	RemoveTNT(tnt);

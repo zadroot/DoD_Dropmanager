@@ -1,11 +1,11 @@
 /**
-* DoD:S Dropmanager by Root
+* DoD:S DropManager by Root
 *
 * Description:
 *   Allows player to drop healthkit, ammo box or TNT.
 *   Special thanks to FeuerSturm and BenSib!
 *
-* Version 2.0
+* Version 3.0
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
@@ -19,27 +19,20 @@
 
 // ====[ CONSTANTS ]=================================================================
 #define PLUGIN_NAME    "DoD:S DropManager"
-#define PLUGIN_VERSION "2.0"
+#define PLUGIN_VERSION "3.0"
 
 #define DOD_MAXPLAYERS 33
 #define MAXHEALTH      100
 #define MAXENTITIES    2048 // Virtual entities can go to 2048 max
 
+#define SLOT_PRIMARY   0
+#define SLOT_EXPLOSIVE 4
+
 enum Teams
 {
-	Unassigned,
-	Spectators,
+	Spectators = 1,
 	Allies,
 	Axis,
-};
-
-enum Slots
-{
-	Primary,
-	Secondary,
-	Melee,
-	Grenade,
-	Explosive,
 };
 
 enum Items
@@ -49,15 +42,10 @@ enum Items
 	Bomb,
 };
 
-// ====[ VARIABLES ]=================================================================
-new Handle:menumode     = INVALID_HANDLE,
-	Handle:deaddrop     = INVALID_HANDLE,
-	Handle:alivecheck   = INVALID_HANDLE,
-	Handle:itemlifetime = INVALID_HANDLE,
-	Handle:cooldowntime = INVALID_HANDLE,
-	ItemDropped[DOD_MAXPLAYERS + 1];
+new LastDropped[DOD_MAXPLAYERS + 1];
 
 // ====[ PLUGIN ]====================================================================
+#include "dropmanager/convars.sp"
 #include "dropmanager/ammobox.sp"
 #include "dropmanager/healthkit.sp"
 #include "dropmanager/tnt.sp"
@@ -78,32 +66,11 @@ public Plugin:myinfo =
  * ---------------------------------------------------------------------------------- */
 public OnPluginStart()
 {
-	// Create version ConVar
-	CreateConVar       ("dod_dropmanager_version", PLUGIN_VERSION, PLUGIN_NAME, FCVAR_NOTIFY|FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED);
+	// Create version convar
+	CreateConVar("dod_dropmanager_version", PLUGIN_VERSION, PLUGIN_NAME, FCVAR_NOTIFY|FCVAR_PLUGIN|FCVAR_SPONLY);
 
-	// Create normal ConVars
-	allowhealthkit     = CreateConVar("dod_dropmanager_healthkit",    "1",  "Whether or not enable healthkit dropping", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	allowammobox       = CreateConVar("dod_dropmanager_ammobox",      "1",  "Whether or not enable ammo box dropping", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	allowtnt           = CreateConVar("dod_dropmanager_tnt",          "1",  "Whether or not enable TNT dropping", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	menumode           = CreateConVar("dod_dropmanager_menumode",     "0",  "Whether or not use 'menu mode'\nIt lets player choose items for dropping using panel", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	deaddrop           = CreateConVar("dod_dropmanager_deaddrop",     "3",  "Determines item to drop on player's death:\n0 = Nothing\n1 = Healthkit\n2 = Ammo box\n3 = TNT\n4 = Random", FCVAR_PLUGIN, true, 0.0, true, 4.0);
-	alivecheck         = CreateConVar("dod_dropmanager_alivecheck",   "1",  "Whether or not check item avaliability before death. Can be useful for deaddop feature", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	itemlifetime       = CreateConVar("dod_dropmanager_lifetime",     "45", "Number of seconds a dropped item stays on the map", FCVAR_PLUGIN, true, 10.0, true, 120.0);
-	cooldowntime       = CreateConVar("dod_dropmanager_cooldown",     "3",  "Number of seconds to wait between two drop commands", FCVAR_PLUGIN, true, 0.0, true, 30.0);
-
-	healthkitrule      = CreateConVar("dod_drophealthkit_pickuprule", "0",  "Determines who can pick up dropped healthkits:\n0 = Everyone\n1 = Only teammates\n2 = Only enemies", FCVAR_PLUGIN, true, 0.0, true, 2.0);
-	healthkithealth    = CreateConVar("dod_drophealthkit_addhealth",  "50", "Determines amount of health to add to a player which picking up a healthkit", FCVAR_PLUGIN, true, 0.0, true, 100.0);
-	healthkitselfheal  = CreateConVar("dod_drophealthkit_selfheal",   "30", "Determines amount of player's health to allow heal himself using own healthkit", FCVAR_PLUGIN, true, 0.0, true, 99.0);
-	healthkitteamcolor = CreateConVar("dod_drophealthkit_teamcolor",  "0",  "Whether or not colorize dropped healthkit depends on player's team", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	healthkitcustom    = CreateConVar("dod_drophealthkit_newmodel",   "0",  "Whether or not use custom model for healthkit\nDo not change until map change", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-
-	ammopickuprule     = CreateConVar("dod_dropammobox_pickuprule",   "1",  "Determines who can pick up dropped ammo box:\n0 = Everyone\n1 = Only teammates\n2 = Only enemies", FCVAR_PLUGIN, true, 0.0, true, 2.0);
-	ammosize           = CreateConVar("dod_dropammobox_clipsize",     "2",  "Determines number of clips a dropped ammo box contains", FCVAR_PLUGIN, true, 1.0, true, 5.0);
-	ammorealism        = CreateConVar("dod_dropammobox_realism",      "0",  "Whether or not use 'realism' mode\nIt means player may share ammo of primary weapons until no ammo left", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	ammovoice          = CreateConVar("dod_dropammobox_voice",        "1",  "Whether or not use voice command when ammo is dropped", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-
-	tntpickuprule      = CreateConVar("dod_droptnt_pickuprule",       "0",  "Determines who can pick up dropped TNT:\n0 = Everyone\n1 = Only teammates\n2 = Only enemies", FCVAR_PLUGIN, true, 0.0, true, 2.0);
-	tntmaxdrops        = CreateConVar("dod_droptnt_maxdrops",         "2",  "Determines how many TNT's player can drop per life\nThis cvar created against spamming around bomb dispencer", FCVAR_PLUGIN, true, 1.0);
+	// Load all plugin convars from dropmanager/convars.sp file
+	LoadConVars();
 
 	// Added: 2.0 update
 	LoadTranslations("dod_dropmanager.phrases");
@@ -129,9 +96,9 @@ public OnPluginStart()
 public OnConfigsExecuted()
 {
 	// If custom healthkit model is defined...
-	if (GetConVarBool(healthkitcustom))
+	if (GetConVar[Healthkit_NewModel][Value])
 	{
-		// ...allow custom healthkit files to be downloaded to client
+		// ...allow custom healthkit files to be downloaded to clients
 		for (new i = 0; i < sizeof(HealthkitFiles); i++)
 			AddFileToDownloadsTable(HealthkitFiles[i]);
 		PrecacheModel(HealthkitModel2, true);
@@ -164,12 +131,12 @@ public Action:OnPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcas
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
 	// If healthkits is enabled, allow players to use it, otherwise disable
-	if (GetConVarBool(allowhealthkit))
+	if (GetConVar[AllowHealthkit][Value])
 		 HasHealthkit[client] = true;
 	else HasHealthkit[client] = false;
 
 	// Same way for ammo box
-	if (GetConVarBool(allowammobox))
+	if (GetConVar[AllowAmmoBox][Value])
 		 HasAmmoBox[client] = true;
 	else HasAmmoBox[client] = false;
 
@@ -189,52 +156,45 @@ public Action:OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcas
 	if (GetClientHealth(client) < 1)
 	{
 		// Check 4th slot (a bomb) right before death, because 'dod_tnt_pickup' event is client-side only
-		if (GetConVarBool(allowtnt)
-		&& IsValidEntity(GetPlayerWeaponSlot(client, slot:Explosive)))
+		if (GetConVar[AllowTNT][Value]
+		&& IsValidEntity(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE)))
 		{ HasTNT[client] = true; }
 
-		// Get value of 'drop on death' convar
-		switch (GetConVarInt(deaddrop))
+		switch (GetConVar[DeadDrop][Value])
 		{
-			// Check for item avaliability and create it depends on value
 			case 1:
 			{
-				// If 'alive check' is disabled, create healthkit (also if healthkits is disabled)
-				if (!GetConVarBool(alivecheck)) CreateItem(client, type:Healthkit);
-				else if (HasHealthkit[client])  CreateItem(client, type:Healthkit);
+				if (!GetConVar[AliveCheck][Value]) CreateItem(client, type:Healthkit);
+				else if (HasHealthkit[client])     CreateItem(client, type:Healthkit);
 			}
 			case 2:
 			{
-				if (!GetConVarBool(alivecheck)) CreateItem(client, type:Ammobox);
-
-				// Otherwise check item avaliability, and create it
-				else if (HasAmmoBox[client])    CreateItem(client, type:Ammobox);
+				if (!GetConVar[AliveCheck][Value]) CreateItem(client, type:Ammobox);
+				else if (HasAmmoBox[client])       CreateItem(client, type:Ammobox);
 			}
 			case 3:
 			{
-				if (!GetConVarBool(alivecheck)) CreateItem(client, type:Bomb);
-				else if (HasTNT[client])        CreateItem(client, type:Bomb);
+				if (!GetConVar[AliveCheck][Value]) CreateItem(client, type:Bomb);
+				else if (HasTNT[client])           CreateItem(client, type:Bomb);
 			}
 			case 4:
 			{
-				// Create a random item here
 				switch (GetRandomInt(from:Healthkit, to:Bomb))
 				{
-					// Do the same here
 					case Healthkit:
 					{
-						if (!GetConVarBool(alivecheck)) CreateItem(client, type:Healthkit);
-						else if (HasHealthkit[client])  CreateItem(client, type:Healthkit);
+						if (!GetConVar[AliveCheck][Value]) CreateItem(client, type:Healthkit);
+						else if (HasHealthkit[client])     CreateItem(client, type:Healthkit);
 					}
 					case Ammobox:
 					{
-						if (!GetConVarBool(alivecheck)) CreateItem(client, type:Ammobox);
-						else if (HasAmmoBox[client])    CreateItem(client, type:Ammobox);
+						if (!GetConVar[AliveCheck][Value]) CreateItem(client, type:Ammobox);
+						else if (HasAmmoBox[client])       CreateItem(client, type:Ammobox);
 					}
 					case Bomb:
 					{
-						if (!GetConVarBool(alivecheck)) CreateItem(client, type:Bomb);
-						else if (HasTNT[client])        CreateItem(client, type:Bomb);
+						if (!GetConVar[AliveCheck][Value]) CreateItem(client, type:Bomb);
+						else if (HasTNT[client])           CreateItem(client, type:Bomb);
 					}
 				}
 			}
@@ -252,37 +212,34 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 	if (IsValidClient(client) && IsPlayerAlive(client))
 	{
 		// If at least one feature is enabled - continue
-		if (GetConVarBool(allowhealthkit) || GetConVarBool(allowammobox) || GetConVarBool(allowtnt))
+		if (GetConVar[AllowHealthkit][Value] || GetConVar[AllowAmmoBox][Value] || GetConVar[AllowTNT][Value])
 		{
-			// Create formula for LastDropTime due to cooldown
-			new LastDropTime = (GetTime() - ItemDropped[client]);
-
 			// It's really needed to check for TNT avaliability here
-			if (GetConVarBool(allowtnt)
-			&& IsValidEntity(GetPlayerWeaponSlot(client, slot:Explosive)))
+			if (GetConVar[AllowTNT][Value]
+			&& IsValidEntity(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE)))
 			{ HasTNT[client] = true; }
 
 			// Check current ammo to allow or disallow dropping
-			if (GetConVarBool(allowammobox)) PerformAmmunition(client, ammotype:check);
+			if (GetConVar[AllowAmmoBox][Value]) PerformAmmunition(client, ammotype:check);
+
+			// Create formula for LastDropTime due to cooldown
+			new LastDropTime = (GetTime() - LastDropped[client]);
 
 			// Continue if time of last item dropping is equal or expired
-			if (LastDropTime >= GetConVarInt(cooldowntime))
+			if (LastDropTime >= GetConVar[CoolDown][Value])
 			{
 				// Get time that client dropped item
-				ItemDropped[client] = GetTime();
+				LastDropped[client] = GetTime();
 
 				// Menu mode is enabled
-				if (GetConVarBool(menumode))
+				if (GetConVar[MenuMode][Value])
 				{
-					// initialize strings because I cant translate items directly in a panel
-					decl String:szMenuTitle[64], String:szHealthkit[64], String:szAmmoBox[64], String:szTNT[64], String:szClose[64];
-
 					// Format a string into translated one
-					Format(szMenuTitle, sizeof(szMenuTitle), "%t", "Menu title");
-					Format(szHealthkit, sizeof(szHealthkit), "%t", "Healthkit");
-					Format(szAmmoBox,   sizeof(szAmmoBox),   "%t", "Ammobox");
-					Format(szTNT,       sizeof(szTNT),       "%t", "TNT");
-					Format(szClose,     sizeof(szClose),     "%t", "Close");
+					decl String:szMenuTitle[64]; Format(szMenuTitle, sizeof(szMenuTitle), "%t", "Menu title");
+					decl String:szHealthkit[64]; Format(szHealthkit, sizeof(szHealthkit), "%t", "Healthkit");
+					decl String:szAmmoBox[64];   Format(szAmmoBox,   sizeof(szAmmoBox),   "%t", "Ammobox");
+					decl String:szTNT[64];       Format(szTNT,       sizeof(szTNT),       "%t", "TNT");
+					decl String:szClose[64];     Format(szClose,     sizeof(szClose),     "%t", "Close");
 
 					// Panel is much better than menu
 					new Handle:dropmenu = CreatePanel();
@@ -334,7 +291,7 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 			{
 				// Cooldown string
 				decl String:szCooldown[128];
-				Format(szCooldown, sizeof(szCooldown), "%t", "Cooldown", GetConVarInt(cooldowntime) - LastDropTime);
+				Format(szCooldown, sizeof(szCooldown), "%t", "Cooldown", GetConVar[CoolDown][Value] - LastDropTime);
 
 				// Draw warning message in a middle of the screen
 				PrintHintText(client, szCooldown);
@@ -344,7 +301,6 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 		// Use 'dropammo' as usual if healthkits, ammo boxes and bombs is disabled
 		else return Plugin_Continue;
 	}
-
 	return Plugin_Handled;
 }
 
@@ -374,7 +330,7 @@ public DropMenuHandler(Handle:menu, MenuAction:action, client, param)
  * ---------------------------------------------------------------------------------- */
 CreateItem(client, index)
 {
-	// Make sure that number of entities in the server is not exceeded number of virtual entities
+	// Make sure that number of entities in the server is not exceeded number of max virtual entities
 	if (GetEntityCount() < GetMaxEntities() - 32)
 	{
 		// Creates a prop_physics_override entity, but does not spawn it yet
@@ -390,11 +346,15 @@ CreateItem(client, index)
 	}
 
 	// Otherwise dont spawn any more items to prevent 'Engine error: ED_Alloc: no free edicts' (otherwise known as server crash) and disable plugin
-	else SetFailState("Entity limit is nearly reached (%i out of %i max.). Please switch or reload the map!", GetEntityCount(), GetMaxEntities());
+	else SetFailState("Entity limit is nearly reached (%i out of %i). Please switch or reload the map!", GetEntityCount(), GetMaxEntities());
 }
 
 /* IsValidClient()
  *
  * Checks if a client is valid.
  * ---------------------------------------------------------------------------------- */
-bool:IsValidClient(client) return (client > 0 && client <= MaxClients && IsClientInGame(client)) ? true : false;
+bool:IsValidClient(client)
+{
+	// Make sure client index is valid, client in game and not a spectator
+	return (client > 0 && client <= MaxClients && IsClientInGame(client) && Teams:GetClientTeam(client) > Teams:Spectators) ? true : false;
+}
