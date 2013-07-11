@@ -1,9 +1,16 @@
-// ====[ VARIABLES ]================================================================
-new Handle:lifetimer_healthkit[MAXENTITIES + 1],
-	HealthkitOwner[MAXENTITIES + 1],
-	bool:HasHealthkit[DOD_MAXPLAYERS + 1];
+/**
+ * ------------------------------------------------------------------------------------------------------
+ *      __ __
+ *     / // /__   ____ ___ _____
+ *    / / __/ _ \/ __ `__ \ ___/
+ *   / / /_/  __/ / / / / (__  )
+ *  /_/\__/\___/_/ /_/ /_/____/
+ *
+ * ------------------------------------------------------------------------------------------------------
+*/
 
-new const
+new	bool:HasHealthkit[DOD_MAXPLAYERS + 1];
+new	const
 	String:HealthkitModel[]   = { "models/props_misc/ration_box01.mdl" },
 	String:HealthkitModel2[]  = { "models/props_misc/ration_box02.mdl" },
 	String:HealthkitSound[]   = { "object/object_taken.wav" },
@@ -25,47 +32,50 @@ new const
 /* OnHealthKitTouched()
  *
  * When the healthkit is touched.
- * --------------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------------------------------ */
 public Action:OnHealthKitTouched(healthkit, client)
 {
-	// Make sure client and healthkit is valid
-	if (IsValidClient(client) && IsValidEntity(healthkit))
+	// Make sure client is valid
+	if (IsValidClient(client))
 	{
 		// When storing make sure you don't include the index then returns the client's eye position
 		decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
 
+		new health = GetClientHealth(client);
+
 		// If healthkit's owner just touched healthkit (and had more health than defined in selfheal) equip healthkit back
-		if (HealthkitOwner[healthkit] == client && GetClientHealth(client) > GetConVar[Healthkit_SelfHeal][Value])
+		if (GetEntPropEnt(healthkit, Prop_Data, "m_hBreaker") == client
+		&&  health > GetConVar[Healthkit_SelfHeal][Value]
+		&&  HasHealthkit[client] == false)
 		{
-			if (HasHealthkit[client] == false)
-			{
-				KillHealthKitTimer(healthkit);
-				RemoveHealthkit(healthkit);
+			// Kill it from world
+			RemoveEntity(healthkit);
 
-				// Play a pickup sound around player on pickup
-				EmitAmbientSound(HealthkitSound, vecOrigin, client);
+			EmitAmbientSound(HealthkitSound, vecOrigin, client);
 
-				HasHealthkit[client] = true;
-				return Plugin_Handled;
-			}
+			HasHealthkit[client] = true;
 			return Plugin_Handled;
 		}
 
-		// Gettin' values that needed for healthkit
-		new health       = GetClientHealth(client);
+		// Get the values that needed for healthkit
 		new healthkitadd = GetConVar[Healthkit_AddHealth][Value];
 		new pickuprule   = GetConVar[Healthkit_PickupRule][Value];
 		new clteam       = GetClientTeam(client);
-		new kitteam      = GetEntProp(healthkit, Prop_Send, "m_nSkin");
+		new kitteam      = GetEntProp(healthkit, Prop_Send, "m_iTeamNum");
 
 		// Perform healing depends on pickup rule
-		if ((pickuprule == 0)
-		||  (pickuprule == 1 && kitteam == clteam)
-		||  (pickuprule == 2 && kitteam != clteam))
+		if ((pickuprule == allteams)
+		||  (pickuprule == mates   && kitteam == clteam)
+		||  (pickuprule == enemies && kitteam != clteam))
 		{
 			// Check if client's health is less than max health
 			if (health < MAXHEALTH)
 			{
+				// Kill it immediately (fix for 'infinite heal')
+				RemoveEntity(healthkit);
+
+				EmitAmbientSound(HealSound, vecOrigin, client);
+
 				// If current client health + healthkit is more than 100, just give player full health
 				if (health + healthkitadd >= MAXHEALTH)
 				{
@@ -78,14 +88,8 @@ public Action:OnHealthKitTouched(healthkit, client)
 					SetEntityHealth(client,  health + healthkitadd);
 					PrintCenterText(client, "+%i hp", healthkitadd);
 				}
-
-				KillHealthKitTimer(healthkit);
-				RemoveHealthkit(healthkit);
-
-				EmitAmbientSound(HealSound, vecOrigin, client);
 				return Plugin_Handled;
 			}
-			return Plugin_Handled;
 		}
 	}
 	return Plugin_Handled;
@@ -94,112 +98,35 @@ public Action:OnHealthKitTouched(healthkit, client)
 /* SpawnHealthkit()
  *
  * Spawns a healthkit in front of player.
- * --------------------------------------------------------------------------------- */
-SpawnHealthkit(healthkit, client)
+ * ------------------------------------------------------------------------------------------------------ */
+SpawnHealthkit(healthkit, client, bool:IsAlivePlayer)
 {
-	// Needed to get team for pickuprule and colorize stuff
-	new team = GetClientTeam(client);
-
-	decl Float:origin[3], Float:angles[3], Float:velocity[3];
-	GetClientAbsOrigin(client, origin);
-	GetClientEyeAngles(client, angles);
-	GetAngleVectors(angles, velocity, NULL_VECTOR, NULL_VECTOR);
-
-	// Normalize vector
-	NormalizeVector(velocity, velocity);
-	ScaleVector(velocity, 360.0);
-
 	// Set healthkit model
 	if (GetConVar[Healthkit_NewModel][Value])
-		 DispatchKeyValue(healthkit, "model", HealthkitModel2);
-	else DispatchKeyValue(healthkit, "model", HealthkitModel);
+		 SetEntityModel(healthkit, HealthkitModel2);
+	else SetEntityModel(healthkit, HealthkitModel);
 
 	if (DispatchSpawn(healthkit))
 	{
-		SetEntProp(healthkit, Prop_Send, "m_nSkin", Teams:team);
-		SetEntProp(healthkit, Prop_Send, "m_usSolidFlags",  152);
-		SetEntProp(healthkit, Prop_Send, "m_CollisionGroup", 11);
-
-		// If player is alive, teleport entity using stored origin, angles and velocity
-		if (GetClientHealth(client) > 0)
+		if (IsAlivePlayer)
 		{
-			origin[2] += 45.0;
-			TeleportEntity(healthkit, origin, angles, velocity);
-
 			// Make client as a dropped healthkit owner
-			HealthkitOwner[healthkit] = client;
+			SetEntPropEnt(healthkit, Prop_Data, "m_hBreaker", client);
 
 			// Also do a stuff that client dont have a healthkit anymore
-			HasHealthkit[client]      = false;
+			HasHealthkit[client] = false;
 		}
-		else
-		{
-			origin[2] += 5.0;
-			TeleportEntity(healthkit, origin, NULL_VECTOR, NULL_VECTOR);
-		}
+
+		SetEntProp(healthkit, Prop_Data, "m_iHammerID", Healthkit);
 
 		// Colorize a healthkit depends on team if needed
 		if (GetConVar[Healthkit_TeamColor][Value])
 		{
-			switch (Teams:team)
+			switch (GetClientTeam(client))
 			{
 				case Allies: SetEntityRenderColor(healthkit, 128, 255, 128, 255);
 				case Axis:   SetEntityRenderColor(healthkit, 255, 128, 128, 255);
 			}
 		}
-
-		CreateTimer(0.5, HookHealthKitTouch, healthkit);
-		lifetimer_healthkit[healthkit] = CreateTimer(GetConVar[ItemLifeTime][Value], RemoveDroppedHealthKit, healthkit);
 	}
-}
-
-/* HookHealthKitTouch()
- *
- * Makes healthkit able to be touched by player.
- * --------------------------------------------------------------------------------- */
-public Action:HookHealthKitTouch(Handle:timer, any:healthkit)
-{
-	if (IsValidEntity(healthkit)) SDKHook(healthkit, SDKHook_Touch, OnHealthKitTouched);
-}
-
-/* RemoveDroppedHealthKit()
- *
- * Removes dropped healthkit after X seconds on a map.
- * --------------------------------------------------------------------------------- */
-public Action:RemoveDroppedHealthKit(Handle:timer, any:healthkit)
-{
-	// Kill timer
-	lifetimer_healthkit[healthkit] = INVALID_HANDLE;
-	RemoveHealthkit(healthkit);
-}
-
-/* RemoveHealthkit()
- *
- * Fully removes a healthkit model from map.
- * --------------------------------------------------------------------------------- */
-RemoveHealthkit(healthkit)
-{
-	if (IsValidEntity(healthkit))
-	{
-		decl String:model[PLATFORM_MAX_PATH];
-		Format(model, PLATFORM_MAX_PATH, NULL_STRING);
-		GetEntPropString(healthkit, Prop_Data, "m_ModelName", model, PLATFORM_MAX_PATH);
-
-		if (StrEqual(model, HealthkitModel) || StrEqual(model, HealthkitModel2))
-			AcceptEntityInput(healthkit, "KillHierarchy");
-	}
-}
-
-/* KillHealthKitTimer()
- *
- * Fully closing timer that removing healthkit after X seconds.
- * --------------------------------------------------------------------------------- */
-KillHealthKitTimer(healthkit)
-{
-	// Check if timer is not yet killed, and then kill it
-	if (lifetimer_healthkit[healthkit] != INVALID_HANDLE)
-	{
-		CloseHandle(lifetimer_healthkit[healthkit]);
-	}
-	lifetimer_healthkit[healthkit] = INVALID_HANDLE;
 }

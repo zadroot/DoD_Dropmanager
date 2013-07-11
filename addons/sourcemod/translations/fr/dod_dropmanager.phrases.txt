@@ -2,7 +2,7 @@
 {
 	"Menu title"
 	{
-		"fr"		"Choisissez un objet a lacher:"
+		"fr"		"Choisissez un objet à lacher:"
 	}
 	"Full hp"
 	{
@@ -20,12 +20,8 @@
 	{
 		"fr"		"TNT"
 	}
-	"Close"
-	{
-		"fr"		"Fermer"
-	}
 	"Cooldown"
 	{
-		"fr"		"Vous n'etes pas autoriser a lacher un objet pendant {1} secondes!"
+		"fr"		"Vous n'êtes pas autoriser à lacher un objet pendant {1} secondes!"
 	}
 }

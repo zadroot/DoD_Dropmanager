@@ -20,10 +20,6 @@
 	{
 		"en"		"TNT"
 	}
-	"Close"
-	{
-		"en"		"Close"
-	}
 	"Cooldown"
 	{
 		"#format"	"{1:i}"
