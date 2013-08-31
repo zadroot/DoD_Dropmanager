@@ -287,7 +287,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 			GetEntPropVector(item, Prop_Send, "m_vecOrigin", vec2);
 
 			// If distance is pretty close (like default for weapons to pickup using +USE button), retrieve the item index
-			if (GetVectorDistance(vec1, vec2) < 100.0)
+			if (GetVectorDistance(vec1, vec2) < 128.0)
 			{
 				switch (GetEntProp(item, Prop_Data, "m_iHammerID"))
 				{

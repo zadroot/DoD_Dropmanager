@@ -217,7 +217,7 @@ SpawnGrenade(nade, client, bool:IsAlivePlayer)
 
 /* Timer_ChangeWeapon()
  *
- * Equips player weapon after dropping all grenades.
+ * Equips new player weapon after dropping grenades or pistols.
  * ------------------------------------------------------------------------------------------------------ */
 public Action:Timer_ChangeWeapon(Handle:timer, any:client)
 {
