@@ -11,25 +11,58 @@
 
 #define SMALLEST_INTERVAL 0.1
 
+#if !defined REALISM
 #define COLT 0
+#endif
 #define frag_us 0
 #define frag_ger 1
 
-// I've changed table to avoid overbounds: { noweapon, colt, p38, c96, garand, k98, m1carbine }
-new	bool:HasPistol[DOD_MAXPLAYERS + 1], pistoloffs[]  = { -1, 4, 8, 12, -1, -1, 24 },
-	bool:HasNade[DOD_MAXPLAYERS + 1],   grenadeoffs[] = { 52, 56 };
+#if defined REALISM
+enum pistols
+{
+	colt,
+	p38,
+	c96,
+	m1carbine
+}
+#endif
+
+// I've changed array to avoid overbounds
+new	bool:HasPistol[DOD_MAXPLAYERS + 1],
+#if defined REALISM // { colt, p38, c96, m1carbine }
+	pistoloffs[]  = { 4, 8, 12, 24 },
+#else //{ noweapon, colt, p38, c96, garand, k98, m1carbine }
+	pistoloffs[]  = { -1, 4, 8, 12, -1, -1, 24 },
+#endif
+	bool:HasNade[DOD_MAXPLAYERS + 1], grenadeoffs[] = { 52, 56 };
 
 new	const
 	String:PickSound[]       = { "weapons/ammopickup.wav" },
 	String:Grenades[][]      = { "weapon_frag_us", "weapon_frag_ger" },
 	String:GrenadeModels[][] = { "models/weapons/w_frag.mdl", "models/weapons/w_stick.mdl" },
-	String:Pistols[][]       = // Because I already ignore 'weapon_' prefix
+	String:Pistols[][]       =
+#if !defined REALISM
 {
 	"colt",
 	"p38",
 	"c96",
 	"m1carbine"
 };
+#else
+{
+	"weapon_colt",
+	"weapon_p38",
+	"weapon_c96",
+	"weapon_m1carbine"
+},
+	String:PistolModels[][]  =
+{
+	"models/weapons/w_colt.mdl",
+	"models/weapons/w_p38.mdl",
+	"models/weapons/w_c96.mdl",
+	"models/weapons/w_m1carb.mdl"
+};
+#endif
 
 /* OnPistolTouched()
  *
@@ -47,6 +80,23 @@ public Action:OnPistolTouched(pistol, client)
 			GetClientEyePosition(client, vecOrigin);
 			EmitAmbientSound(AmmoSound,  vecOrigin, client);
 
+		#if defined REALISM
+			// Check which pistol is taken
+			switch (GetEntProp(pistol, Prop_Send, "m_nBody"))
+			{
+				// Give appropriate pistol to a player
+				case colt:      GivePlayerItem(client, Pistols[colt]);
+				case p38:       GivePlayerItem(client, Pistols[p38]);
+				case c96:       GivePlayerItem(client, Pistols[c96]);
+				case m1carbine: GivePlayerItem(client, Pistols[m1carbine]);
+			}
+
+			// And set the ammo
+			SetPistolAmmo_Realism(client, pistol, ammotype:pickup);
+
+			// Now we can easily kill the entity from the world
+			RemoveEntity(pistol);
+		#else
 			// Now properly give a pistol to player, and set it ammo
 			EquipPlayerWeapon(client, pistol);
 			SetPistolAmmo(client, pistol, ammotype:pickup);
@@ -55,6 +105,7 @@ public Action:OnPistolTouched(pistol, client)
 			SDKUnhook(pistol, SDKHook_Touch, OnPistolTouched);
 
 			HasPistol[client] = true;
+		#endif
 		}
 
 		// Otherwise dont allow player to pick it
@@ -63,7 +114,105 @@ public Action:OnPistolTouched(pistol, client)
 	return Plugin_Handled;
 }
 
-/* SetAmmo()
+#if defined REALISM
+/* SpawnPistol()
+ *
+ * Spawns a pistol in front of player.
+ * ------------------------------------------------------------------------------------------------------ */
+SpawnPistol(pistol, client, const Float:angles[3], bool:IsAlivePlayer)
+{
+	// Check for pistol here
+	new secondary = GetPlayerWeaponSlot(client, SLOT_SECONDARY);
+
+	// Does we are going to drop secondary weapon?
+	if (IsValidEntity(secondary))
+	{
+		// Declare the string to check classname of a pistol
+		decl String:weapon[MAX_WEAPON_LENGTH];
+		GetEdictClassname(secondary, weapon, sizeof(weapon));
+
+		// Colt is about to be dropped
+		if (StrEqual(weapon, Pistols[colt]))
+		{
+			SetEntProp(pistol, Prop_Send, "m_nBody", colt);
+
+			// Colt world model is fucked up, so change model to p38's one and do some magic later
+			SetEntityModel(pistol, PistolModels[p38]);
+		}
+		else if (StrEqual(weapon, Pistols[p38]))
+		{
+			// Set the appropriately 'group' of an entity since p38 was dropped
+			SetEntProp(pistol, Prop_Send, "m_nBody", p38);
+			SetEntityModel(pistol, PistolModels[p38]);
+		}
+		// c96 is dropped
+		else if (StrEqual(weapon, Pistols[c96]))
+		{
+			SetEntProp(pistol, Prop_Send, "m_nBody", c96);
+			SetEntityModel(pistol, PistolModels[c96]);
+		}
+		else if (StrEqual(weapon, Pistols[m1carbine]))
+		{
+			SetEntProp(pistol, Prop_Send, "m_nBody", m1carbine);
+			SetEntityModel(pistol, PistolModels[m1carbine]);
+		}
+
+		if (DispatchSpawn(pistol))
+		{
+			// After spawning an item set the ammo
+			SetPistolAmmo_Realism(client, pistol, ammotype:drop);
+
+			// And group to make proper touch hook
+			SetEntProp(pistol, Prop_Data, "m_iHammerID", Pistol);
+
+			// If colt was dropped, set the world 'skin' to colt when the p38 model is used
+			if (!GetEntProp(pistol, Prop_Send, "m_nBody"))
+				 SetEntProp(pistol, Prop_Data, "m_nModelIndex", PrecacheModel(PistolModels[colt]));
+
+			// Does player is alive?
+			if (IsAlivePlayer)
+			{
+				// Change weapon and remove pistol
+				CreateTimer(SMALLEST_INTERVAL, Timer_ChangeWeapon, client, TIMER_FLAG_NO_MAPCHANGE);
+
+				RemoveWeapon(client, secondary);
+
+				TeleportEntity(pistol, NULL_VECTOR, angles, NULL_VECTOR);
+			}
+		}
+	}
+}
+
+/* SetPistolAmmo()
+ *
+ * Adds magazines to a specified weapons.
+ * ------------------------------------------------------------------------------------------------------ */
+SetPistolAmmo_Realism(client, weapon, type)
+{
+	if (IsValidEntity(weapon))
+	{
+		new secondary = GetPlayerWeaponSlot(client, SLOT_SECONDARY);
+		new WeaponID  = GetEntProp(weapon, Prop_Send, "m_nBody");
+
+		// Retrieve the type for ammunition
+		switch (type)
+		{
+			case drop:
+			{
+				SetEntProp(weapon, Prop_Data, "m_iMaxHealth", GetEntProp(secondary, Prop_Send, "m_iClip1"));
+				SetEntProp(weapon, Prop_Data, "m_iHealth", GetEntData(client, m_iAmmo + pistoloffs[WeaponID]));
+			}
+			case pickup:
+			{
+				SetEntProp(secondary, Prop_Send, "m_iClip1", GetEntProp(weapon, Prop_Data, "m_iMaxHealth"));
+				SetEntData(client, m_iAmmo + pistoloffs[WeaponID], GetEntProp(weapon, Prop_Data, "m_iHealth"));
+			}
+		}
+	}
+}
+
+#else
+/* SetPistolAmmo()
  *
  * Adds magazines to a specified weapons.
  * ------------------------------------------------------------------------------------------------------ */
@@ -82,6 +231,7 @@ SetPistolAmmo(client, weapon, type)
 		case pickup: SetEntData(client, m_iAmmo + pistoloffs[WeaponID], GetEntProp(weapon, Prop_Send, "m_iClip2"));
 	}
 }
+#endif
 
 /* OnGrenadeTouched()
  *
@@ -145,7 +295,7 @@ public OnGrenadeTouched(nade, client)
  *
  * Spawns a grenade in front of player.
  * ------------------------------------------------------------------------------------------------------ */
-SpawnGrenade(nade, client, bool:IsAlivePlayer)
+SpawnGrenade(nade, client, const Float:angles[3], bool:IsAlivePlayer)
 {
 	new grenade = GetPlayerWeaponSlot(client, SLOT_GRENADE);
 
@@ -211,6 +361,7 @@ SpawnGrenade(nade, client, bool:IsAlivePlayer)
 		{
 			// When its dropped, set the index to Grenade to hook touch functions properly
 			SetEntProp(nade, Prop_Data, "m_iHammerID", Grenade);
+			TeleportEntity(nade, NULL_VECTOR, angles, NULL_VECTOR);
 		}
 	}
 }

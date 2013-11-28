@@ -64,14 +64,39 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 			||  (pickuprule == mates   && ammoteam == clteam)
 			||  (pickuprule == enemies && ammoteam != clteam))
 			{
-				RemoveEntity(ammobox);
+			#if defined REALISM
+				if (!GetConVar[AmmoBox_ClipLimit][Value])
+				{
+			#endif
+					RemoveEntity(ammobox);
 
-				// Emit sound on touch
-				EmitAmbientSound(AmmoSound, vecOrigin, client);
+					// Emit sound on touch
+					EmitAmbientSound(AmmoSound, vecOrigin, client);
 
-				// Set ammunition mode to 'pickup'
-				PerformAmmunition(client, ammotype:pickup);
-				return Plugin_Handled;
+					// Set ammunition mode to 'pickup'
+					PerformAmmunition(client, ammotype:pickup);
+					return Plugin_Handled;
+			#if defined REALISM
+				}
+				else
+				{
+					if ((GetEntData(client, m_iAmmo + 16) < 56)
+					&&  (GetEntData(client, m_iAmmo + 20) < 35)
+					&&  (GetEntData(client, m_iAmmo + 28) < 35)
+					&&  (GetEntData(client, m_iAmmo + 32) < 210)
+					&&  (GetEntData(client, m_iAmmo + 36) < 140)
+					&&  (GetEntData(client, m_iAmmo + 40) < 450)
+					&&  (GetEntData(client, m_iAmmo + 44) < 750)
+					&&  (GetEntData(client, m_iAmmo + 48) < 5))
+					{
+						RemoveEntity(ammobox);
+						EmitAmbientSound(AmmoSound, vecOrigin, client);
+						PerformAmmunition(client, ammotype:pickup);
+						return Plugin_Handled;
+					}
+					return Plugin_Handled;
+				}
+			#endif
 			}
 		}
 	}
