@@ -9,14 +9,18 @@
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
-// To compile realism version uncomment a line below
+/* If you need to get Realism Edition of DropManager
+ * just make sure to uncomment REALISM definition below
+ * and dont forget to recompile a plugin ;-)
+ */
+
 //#define REALISM
 
-// ====[ INCLUDES ]======================================================================================
+// ====[ INCLUDES ]====================================================================================
 #include <sdktools>
 #include <sdkhooks>
 
-// ====[ CONSTANTS ]=====================================================================================
+// ====[ CONSTANTS ]===================================================================================
 #define PLUGIN_NAME         "DoD:S DropManager"
 #if defined REALISM
 #define PLUGIN_VERSION      "1.0 Realism"
@@ -33,7 +37,8 @@
 #define MAX_WEAPON_LENGTH   24
 #define DOD_MAXPLAYERS      33
 #if defined REALISM
-#define MAXHEALTH           83 // Maxhealth value for realism version
+#define IS_MEDIC(%1)        GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1)
+#define MAXHEALTH           83 // Maximum health bounds for realism dropmanager (community request)
 #else
 #define MAXHEALTH           100
 #endif
@@ -85,7 +90,7 @@ new LastDropped[DOD_MAXPLAYERS + 1], Handle:dropmenu = INVALID_HANDLE;
 new Handle:SetDieThink = INVALID_HANDLE, bool:AllowItemDropping = true;
 #endif
 
-// ====[ PLUGIN ]========================================================================================
+// ====[ PLUGIN ]======================================================================================
 #include "dropmanager/convars.sp"
 #include "dropmanager/entremover.sp"
 #include "dropmanager/ammobox.sp"
@@ -106,7 +111,7 @@ public Plugin:myinfo =
 /* OnPluginStart()
  *
  * When the plugin starts up.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public OnPluginStart()
 {
 	// Load plugin's console variables
@@ -133,7 +138,6 @@ public OnPluginStart()
 	DropEntsArray = CreateArray(DropEntInfo_Size);
 
 #if defined REALISM
-	// Prepare signature to accept SetDieThink for weapons
 	new Handle:gameConf = LoadGameConfigFile("plugin.dropmanager");
 
 	// If config is not available, disable plugin
@@ -162,13 +166,13 @@ public OnPluginStart()
 /* OnEntityCreated()
  *
  * When an entity is created.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public OnEntityCreated(entity, const String:classname[])
 {
-	// Make sure ragdoll were created
+	// Make sure game ragdoll were created
 	if (StrEqual(classname, "dod_ragdoll"))
 	{
-		// If ragdolls should stay during all the round, kill it (to create new)
+		// If ragdolls should stay during all the round, kill it (to create new later)
 		if (GetConVar[RagdollStay][Value]) AcceptEntityInput(entity, "Kill");
 	}
 }
@@ -177,7 +181,7 @@ public OnEntityCreated(entity, const String:classname[])
 /* OnConfigsExecuted()
  *
  * When the map has loaded and all plugin configs are done executing.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public OnConfigsExecuted()
 {
 #if defined REALISM
@@ -209,7 +213,7 @@ public OnConfigsExecuted()
 /* OnClientPutInServer()
  *
  * Called when a client is entering the game.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public OnClientPutInServer(client)
 {
 	// Needed to set lifetime for weapon properly
@@ -220,7 +224,7 @@ public OnClientPutInServer(client)
 /* OnPlayerSpawn()
  *
  * Called when a player spawns.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public OnPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Get client userid from event
@@ -247,16 +251,16 @@ public OnPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast)
 /* OnPlayerDeath()
  *
  * Called when a player dies.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Unfortunately I have to hook player_hurt event and check client's health (because death event is too late to check weapon availability)
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	if (GetClientHealth(client) < 1)
 	{
-	#if !defined REALISM
+#if !defined REALISM
 		decl Float:origin[3]; GetClientAbsOrigin(client, origin);
-	#endif
+#endif
 		// Retrieve the pistol and grenade weapons before player's death
 		new pistol  = GetPlayerWeaponSlot(client, SLOT_SECONDARY);
 		new grenade = GetPlayerWeaponSlot(client, SLOT_GRENADE);
@@ -276,7 +280,7 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 		&& IsValidEntity(grenade))
 		{ HasNade[client] = true; }
 
-	#if defined REALISM
+#if defined REALISM
 		// Check whether or not ragdolls should stay in Realism DropManager
 		if (GetConVar[RagdollStay][Value])
 		{
@@ -292,9 +296,11 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 			GetClientModel(client, model, sizeof(model));
 
 			// Set origin, angles and velocity for ragdoll
-			origin[2]   += 35.0;
-			angles[2]   += GetRandomFloat(-40.0, 40.0);
-			velocity[2] += GetRandomFloat(-40.0, 40.0);
+			origin[2]   += 45.0;
+
+			// Set random angles and velocity to make falling a bit more realistic
+			angles[2]   += GetRandomFloat(-45.0, 45.0);
+			velocity[2] += GetRandomFloat(-45.0, 45.0);
 
 			// Set ragdoll model same as victim model
 			SetEntityModel(ragdoll, model);
@@ -304,13 +310,17 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 			{
 				// Make it non-solid and teleport created ragdoll at place where player dies
 				SetEntProp(ragdoll, Prop_Send, "m_CollisionGroup", 11);
+
+				// An experimental stuff with dead players revive
+				SetEntPropEnt(ragdoll, Prop_Data, "m_hKiller", client);
+				SetEntProp(ragdoll, Prop_Send, "m_iTeamNum", GetClientTeam(client));
 				TeleportEntity(ragdoll, origin, angles, NULL_VECTOR);
 
-				// Disable motions for this ragdoll after 5 seconds, because server-side ragdolls are very expensive
+				// Disable motions for this ragdoll after 5 seconds because server-side ragdolls are very expensive
 				CreateTimer(5.0, Timer_DisableMotion, EntIndexToEntRef(ragdoll), TIMER_FLAG_NO_MAPCHANGE);
 			}
 		}
-	#endif
+#endif
 		// Does dead drop features is enabled ?
 		switch (GetConVar[DeadDrop][Value])
 		{
@@ -332,14 +342,14 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 			case Pistol: // Drop pistol after player's death
 			{
 				// If realism dropmanager were compiled, create pistol as a prop_physics_override entity
-			#if defined REALISM
+#if defined REALISM
 				if (alivecheck == false)    CreateItem(client, type:Pistol);
 				else if (HasPistol[client]) CreateItem(client, type:Pistol);
-			#else
+#else
 				// Otherwise drop weapon properly
 				if (alivecheck == false)    DOD_DropWeapon(client, pistol, origin);
 				else if (HasPistol[client]) DOD_DropWeapon(client, pistol, origin);
-			#endif
+#endif
 			}
 			case Grenade: // Drop grenade after player's death
 			{
@@ -369,14 +379,14 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 					}
 					case Pistol:
 					{
-					#if defined REALISM
+#if defined REALISM
 						if (alivecheck == false)    CreateItem(client, type:Pistol);
 						else if (HasPistol[client]) CreateItem(client, type:Pistol);
-					#else
+#else
 						// Also use same drop weapon method here, but change original toss location to 'death origin'
 						if (alivecheck == false)    DOD_DropWeapon(client, pistol, origin);
 						else if (HasPistol[client]) DOD_DropWeapon(client, pistol, origin);
-					#endif
+#endif
 					}
 					case Grenade:
 					{
@@ -385,9 +395,7 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 					}
 				}
 			}
-
-			// Available only for Realism DropManager
-		#if defined REALISM
+#if defined REALISM
 			case All:
 			{
 				// Drop all available items which player is got
@@ -397,7 +405,7 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 				if (HasNade[client])      CreateItem(client, type:Grenade);
 				if (HasTNT[client])       CreateItem(client, type:Bomb);
 			}
-		#endif
+#endif
 		}
 	}
 }
@@ -405,20 +413,20 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 /* OnPlayerRunCmd()
  *
  * When a clients movement buttons are being processed.
- * ------------------------------------------------------------------------------------------------------ */
-public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon, &subtype, &cmdnum, &tickcount, &seed, mouse[2])
+ * ---------------------------------------------------------------------------------------------------- */
+public Action:OnPlayerRunCmd(client, &buttons)
 {
 	// Does player is pressing +USE button and cooldown for dropped weapons is expired?
 	if ((buttons & IN_USE) && GetTime() - LastDropped[client] >= 1)
 	{
 		// Get the entity a client is aiming at
-		decl Float:vec1[3], Float:vec2[3], item;
-		item = GetClientAimTarget(client, false);
+		new item = GetClientAimTarget(client, false);
 
 		// If we found an entity - make sure its valid
 		if (IsValidEntity(item))
 		{
 			// Retrieve the client's eye position and entity origin vector to compare distance
+			decl Float:vec1[3], Float:vec2[3];
 			GetClientEyePosition(client, vec1);
 			GetEntPropVector(item, Prop_Send, "m_vecOrigin", vec2);
 
@@ -432,13 +440,13 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 					case Pistol:
 					{
 						// Create pistol as a prop_physics_override entity for realism
-					#if defined REALISM
+#if defined REALISM
 						CreateItem(client, type:Pistol);
-					#else
+#else
 						// Otherise it's better to change the weapon to best available before dropping it to skip bad animations
 						CreateTimer(SMALLEST_INTERVAL, Timer_ChangeWeapon, client, TIMER_FLAG_NO_MAPCHANGE);
 						DOD_DropWeapon(client, GetPlayerWeaponSlot(client, SLOT_SECONDARY), NULL_VECTOR);
-					#endif
+#endif
 						// For pistol firstly drop the weapon, and then emit hook callback as well
 						OnPistolTouched(item, client);
 					}
@@ -452,7 +460,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 /* OnWeaponDrop()
  *
  * Called when player drops a weapon.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public OnWeaponDrop(client, weapon)
 {
 	// Make sure weapon is valid and infinite time is set
@@ -480,14 +488,15 @@ public OnWeaponDrop(client, weapon)
 /* OnDropWeapon()
  *
  * When the 'drop' command is called.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:OnDropWeapon(client, const String:command[], argc)
 {
 	// Only valid and alive players can use this command
 #if defined REALISM
 	if (IsValidClient(client)
 	&& IsPlayerAlive(client)
-	&& (bool:AllowItemDropping == true)) // In realism dropmanager check whether or not dropping is allowed
+	&& !IS_MEDIC(client)  // Medics are not allowed to drop their weapons
+	&& AllowItemDropping) // In realism dropmanager check whether or not dropping is allowed
 #else
 	if (IsValidClient(client) && IsPlayerAlive(client))
 #endif
@@ -501,7 +510,7 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 			// Loop through all pistol classnames
 			for (new i = 0; i < sizeof(Pistols); i++)
 			{
-			#if defined REALISM
+#if defined REALISM
 				// Check whether or not player holding a pistol
 				if (StrEqual(weapon, Pistols[i]))
 				{
@@ -511,7 +520,7 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 					// Block the command itself, otherwise player will drop pistol and the primary weapon in same time
 					return Plugin_Handled;
 				}
-			#else
+#else
 				// Skip the first 7 characters in weapon string to avoid comparing with the "weapon_" prefix
 				if (StrEqual(weapon[7], Pistols[i]))
 				{
@@ -522,7 +531,7 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 					DOD_DropWeapon(client, GetPlayerWeaponSlot(client, SLOT_SECONDARY), NULL_VECTOR);
 					return Plugin_Handled;
 				}
-			#endif
+#endif
 			}
 		}
 
@@ -552,13 +561,14 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 /* OnDropAmmo()
  *
  * When the 'dropammo' command is called.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:OnDropAmmo(client, const String:command[], argc)
 {
 #if defined REALISM
 	if (IsValidClient(client)
 	&& IsPlayerAlive(client)
-	&& (bool:AllowItemDropping == true)) // Make sure item dropping is allowed
+	&& !IS_MEDIC(client)
+	&& AllowItemDropping)
 #else
 	if (IsValidClient(client) && IsPlayerAlive(client))
 #endif
@@ -666,7 +676,7 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 /* DropMenuHandler()
  *
  * Creates an item depends on client menu selection.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public DropMenuHandler(Handle:menu, MenuAction:action, client, param)
 {
 	// Increase param index because it's starting from 0, but item indexes is starting from 1
@@ -704,7 +714,7 @@ public DropMenuHandler(Handle:menu, MenuAction:action, client, param)
 /* Timer_SetDieThink()
  *
  * Timer to call signature for anti-weapon removing.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:Timer_SetDieThink(Handle:event, any:data)
 {
 	// Convert entity reference to entity index
@@ -719,7 +729,7 @@ public Action:Timer_SetDieThink(Handle:event, any:data)
 /* Timer_DisableMotion()
  *
  * Timer to disable motions for server-side ragdolls.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:Timer_DisableMotion(Handle:event, any:data)
 {
 	new entity  = EntRefToEntIndex(data);
@@ -733,7 +743,7 @@ public Action:Timer_DisableMotion(Handle:event, any:data)
 /* OnRealismStarted()
  *
  * Called when realism has started.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:OnRealismStarted()
 {
 	// Exec realism config for dropmanager when realism starts
@@ -749,7 +759,7 @@ public Action:OnRealismStarted()
 /* OnRealismEnded()
  *
  * Called when realism has ended.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:OnRealismEnded()
 {
 	// Exec public config for dropmanager and allow items dropping again
@@ -760,7 +770,7 @@ public Action:OnRealismEnded()
 /* OnRoundStart()
  *
  * Called when realism round has started (pre-match).
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:OnRoundStart()
 {
 	// Dont allow players to drop anything during warmup
@@ -770,7 +780,7 @@ public Action:OnRoundStart()
 /* OnRoundLive()
  *
  * Called when round state set to LIVE.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:OnRoundLive()
 {
 	AllowItemDropping = true;
@@ -780,7 +790,7 @@ public Action:OnRoundLive()
 /* AddTranslatedMenuItem()
  *
  * Adds translated item names to dropmanager menu.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 AddTranslatedMenuItem(Handle:menu, const String:opt[], const String:phrase[], client)
 {
 	decl String:buffer[64];
@@ -791,7 +801,7 @@ AddTranslatedMenuItem(Handle:menu, const String:opt[], const String:phrase[], cl
 /* CreateItem()
  *
  * Creates an item depends on index (healthkit, ammo box or TNT).
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 CreateItem(client, index)
 {
 	decl item;
@@ -827,9 +837,9 @@ CreateItem(client, index)
 			case Healthkit: SpawnHealthkit(item, client, bool:IsAlivePlayer);
 			case Ammobox:   SpawnAmmoBox(item,   client, bool:IsAlivePlayer);
 			case Bomb:      SpawnTNT(item,       client, bool:IsAlivePlayer);
-		#if defined REALISM
+#if defined REALISM
 			case Pistol:    SpawnPistol(item,    client, angles, bool:IsAlivePlayer);
-		#endif
+#endif
 			case Grenade:   SpawnGrenade(item,   client, angles, bool:IsAlivePlayer);
 		}
 
@@ -856,7 +866,7 @@ CreateItem(client, index)
 /* DOD_DropWeapon()
  *
  * Forces a player to drop their weapon.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 DOD_DropWeapon(client, weapon, const Float:vecTarget[3])
 {
 	// Check for valid client and weapon too
@@ -870,10 +880,10 @@ DOD_DropWeapon(client, weapon, const Float:vecTarget[3])
 		GetEdictClassname(weapon, class, sizeof(class));
 		GetEntPropVector(weapon, Prop_Send, "m_angRotation", ang);
 
-		// A colt was dropped ?
+		// Make sure colt was dropped
 		if (StrEqual(class[7], Pistols[COLT]))
 		{
-			// Colt's physics model is fucked up, and easier way to fix it is just setting model angle by 90 units
+			// Colt's physics model is fucked up, and easier way to fix it is just adding 90 units to model angle
 			// https://github.com/ValveSoftware/Source-1-Games/issues/774
 			ang[2] += 90.0; TeleportEntity(weapon, NULL_VECTOR, ang, NULL_VECTOR);
 
@@ -900,7 +910,7 @@ DOD_DropWeapon(client, weapon, const Float:vecTarget[3])
 /* HookItemTouch()
  *
  * Makes item able to be touched by player.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 public Action:HookItemTouch(Handle:timer, any:ref)
 {
 	// Retrieve the entity index from a reference
@@ -938,14 +948,14 @@ public Action:HookItemTouch(Handle:timer, any:ref)
 			}
 			case Pistol:
 			{
-			#if defined REALISM
+#if defined REALISM
 				SDKHook(item, SDKHook_StartTouchPost, OnPistolTouched);
 				SDKHook(item, SDKHook_TouchPost,      OnPistolTouched);
 				SDKHook(item, SDKHook_EndTouchPost,   OnPistolTouched);
-			#else
+#else
 				// Since we're dropped real pistol entity, its unnecessary to hook Start/EndTouch callbacks as well
 				SDKHook(item, SDKHook_Touch, OnPistolTouched);
-			#endif
+#endif
 			}
 		}
 	}
@@ -954,7 +964,7 @@ public Action:HookItemTouch(Handle:timer, any:ref)
 /* RemoveWeapon()
  *
  * Removes weapon from player's slot.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 RemoveWeapon(client, slot)
 {
 	if (RemovePlayerItem(client, slot))
@@ -967,7 +977,7 @@ RemoveWeapon(client, slot)
 /* RemoveEntity()
  *
  * Removes an entity from the world.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 RemoveEntity(const entity)
 {
 	return AcceptEntityInput(entity, "KillHierarchy");
@@ -976,5 +986,5 @@ RemoveEntity(const entity)
 /* IsValidClient()
  *
  * Checks if a client is valid.
- * ------------------------------------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------------------------------------- */
 bool:IsValidClient(client) return (1 <= client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) > Spectators) ? true : false;

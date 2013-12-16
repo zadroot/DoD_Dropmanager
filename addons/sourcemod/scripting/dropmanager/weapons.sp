@@ -80,7 +80,7 @@ public Action:OnPistolTouched(pistol, client)
 			GetClientEyePosition(client, vecOrigin);
 			EmitAmbientSound(AmmoSound,  vecOrigin, client);
 
-		#if defined REALISM
+#if defined REALISM
 			// Check which pistol is taken
 			switch (GetEntProp(pistol, Prop_Send, "m_nBody"))
 			{
@@ -96,7 +96,7 @@ public Action:OnPistolTouched(pistol, client)
 
 			// Now we can easily kill the entity from the world
 			RemoveEntity(pistol);
-		#else
+#else
 			// Now properly give a pistol to player, and set it ammo
 			EquipPlayerWeapon(client, pistol);
 			SetPistolAmmo(client, pistol, ammotype:pickup);
@@ -105,7 +105,7 @@ public Action:OnPistolTouched(pistol, client)
 			SDKUnhook(pistol, SDKHook_Touch, OnPistolTouched);
 
 			HasPistol[client] = true;
-		#endif
+#endif
 		}
 
 		// Otherwise dont allow player to pick it
@@ -374,6 +374,8 @@ public Action:Timer_ChangeWeapon(Handle:timer, any:client)
 {
 	if (IsValidClient(client))
 	{
+		decl String:weapon[MAX_WEAPON_LENGTH];
+
 		new PrimaryWeapon   = GetPlayerWeaponSlot(client, SLOT_PRIMARY);
 		new SecondaryWeapon = GetPlayerWeaponSlot(client, SLOT_SECONDARY);
 		new MeleeWeapon     = GetPlayerWeaponSlot(client, SLOT_MELEE);
@@ -382,22 +384,30 @@ public Action:Timer_ChangeWeapon(Handle:timer, any:client)
 		// If primary weapon is avalible, switch client's weapon to primary
 		if (IsValidEntity(PrimaryWeapon))
 		{
+			GetEdictClassname(PrimaryWeapon, weapon, sizeof(weapon));
+			FakeClientCommand(client, "use %s", weapon);
 			SetEntPropEnt(client, Prop_Data, "m_hActiveWeapon", PrimaryWeapon);
 		}
 
 		// But if primary weapon is not avalible, use secondary then; otherwise melee
 		else if (IsValidEntity(SecondaryWeapon) && HasPistol[client] == true)
 		{
+			GetEdictClassname(SecondaryWeapon, weapon, sizeof(weapon));
+			FakeClientCommand(client, "use %s", weapon);
 			SetEntPropEnt(client, Prop_Data, "m_hActiveWeapon", SecondaryWeapon);
 		}
 		else if (IsValidEntity(MeleeWeapon))
 		{
+			GetEdictClassname(MeleeWeapon, weapon, sizeof(weapon));
+			FakeClientCommand(client, "use %s", weapon);
 			SetEntPropEnt(client, Prop_Data, "m_hActiveWeapon", MeleeWeapon);
 		}
 
 		// Or even a grenade
 		else if (IsValidEntity(GrenadeSlot))
 		{
+			GetEdictClassname(GrenadeSlot, weapon, sizeof(weapon));
+			FakeClientCommand(client, "use %s", weapon);
 			SetEntPropEnt(client, Prop_Data, "m_hActiveWeapon", GrenadeSlot);
 		}
 	}

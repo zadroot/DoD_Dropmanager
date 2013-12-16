@@ -64,10 +64,10 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 			||  (pickuprule == mates   && ammoteam == clteam)
 			||  (pickuprule == enemies && ammoteam != clteam))
 			{
-			#if defined REALISM
+#if defined REALISM
 				if (!GetConVar[AmmoBox_ClipLimit][Value])
 				{
-			#endif
+#endif
 					RemoveEntity(ammobox);
 
 					// Emit sound on touch
@@ -76,7 +76,7 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 					// Set ammunition mode to 'pickup'
 					PerformAmmunition(client, ammotype:pickup);
 					return Plugin_Handled;
-			#if defined REALISM
+#if defined REALISM
 				}
 				else
 				{
@@ -96,7 +96,7 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 					}
 					return Plugin_Handled;
 				}
-			#endif
+#endif
 			}
 		}
 	}
