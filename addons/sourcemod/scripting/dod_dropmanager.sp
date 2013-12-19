@@ -9,14 +9,9 @@
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
-/* If you need to get Realism Edition of DropManager
- * just make sure to uncomment REALISM definition below
- * and dont forget to recompile a plugin ;-)
- */
-
+/* If you need to get Realism DropManager, just recompile a plugin with REALISM definition below */
 //#define REALISM
 
-// ====[ INCLUDES ]====================================================================================
 #include <sdktools>
 #include <sdkhooks>
 
@@ -30,21 +25,18 @@
 
 // Too many macros (c) Andersso
 #define HOOKTOUCH_DELAY     0.5
-#define THINKTIMER_INTERVAL 1.0
 #define DEATHORIGIN         5.0
 #define ALIVEORIGIN         43.0
 
 #define MAX_WEAPON_LENGTH   24
 #define DOD_MAXPLAYERS      33
 #if defined REALISM
-#define IS_MEDIC(%1)        GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1)
-#define MAXHEALTH           83 // Maximum health bounds for realism dropmanager (community request)
+#define COLLISION_GROUP_INTERACTIVE_DERBIS 3
+#define IS_MEDIC(%1)        GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1) // Compatibility with FieldMedic
+#define SF_NORESPAWN        (1 << 30)
+#define MAXHEALTH           83 // Maximum health bounds for realism dropmanager
 #else
 #define MAXHEALTH           100
-#endif
-
-#if defined REALISM
-#define SF_NORESPAWN       (1 << 30)
 #endif
 
 enum //Slots
@@ -85,9 +77,11 @@ enum //Pickup rule
 	enemies
 }
 
-new LastDropped[DOD_MAXPLAYERS + 1], Handle:dropmenu = INVALID_HANDLE;
+new	LastDropped[DOD_MAXPLAYERS + 1], Handle:dropmenu = INVALID_HANDLE;
 #if defined REALISM
-new Handle:SetDieThink = INVALID_HANDLE, bool:AllowItemDropping = true;
+new	Handle:SetDieThink         = INVALID_HANDLE,
+	Handle:CreateServerRagdoll = INVALID_HANDLE,
+	bool:AllowItemDropping     = true;
 #endif
 
 // ====[ PLUGIN ]======================================================================================
@@ -140,13 +134,13 @@ public OnPluginStart()
 #if defined REALISM
 	new Handle:gameConf = LoadGameConfigFile("plugin.dropmanager");
 
-	// If config is not available, disable plugin
+	// Make sure config is exists, otherwise disable plugin
 	if (gameConf == INVALID_HANDLE)
 	{
 		SetFailState("Could not open game config file: \"plugin.dropmanager\"!");
 	}
 
-	// Prepare SDKCall and its signature
+	// Prepare SDKCall for SetDieThink sig
 	StartPrepSDKCall(SDKCall_Entity);
 	PrepSDKCall_SetFromConf(gameConf, SDKConf_Signature, "SetDieThink");
 	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
@@ -157,26 +151,24 @@ public OnPluginStart()
 		SetFailState("Failed to init SDKCall: \"SetDieThink\"!");
 	}
 
+	// Prepare CreateServerRagdoll signature
+	StartPrepSDKCall(SDKCall_Static);
+	PrepSDKCall_SetFromConf(gameConf, SDKConf_Signature, "CreateServerRagdoll");
+	PrepSDKCall_AddParameter(SDKType_CBaseEntity,  SDKPass_Pointer); // pAnimating
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);   // forceBone
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_ByRef);   // info
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);   // collisionGroup
+	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);           // bUseLRURetirement
+
+	if ((CreateServerRagdoll = EndPrepSDKCall()) == INVALID_HANDLE)
+	{
+		SetFailState("Failed to init SDKCall: \"CreateServerRagdoll\"!");
+	}
+
 	// Free config handle
 	CloseHandle(gameConf);
 #endif
 }
-
-#if defined REALISM
-/* OnEntityCreated()
- *
- * When an entity is created.
- * ---------------------------------------------------------------------------------------------------- */
-public OnEntityCreated(entity, const String:classname[])
-{
-	// Make sure game ragdoll were created
-	if (StrEqual(classname, "dod_ragdoll"))
-	{
-		// If ragdolls should stay during all the round, kill it (to create new later)
-		if (GetConVar[RagdollStay][Value]) AcceptEntityInput(entity, "Kill");
-	}
-}
-#endif
 
 /* OnConfigsExecuted()
  *
@@ -184,9 +176,6 @@ public OnEntityCreated(entity, const String:classname[])
  * ---------------------------------------------------------------------------------------------------- */
 public OnConfigsExecuted()
 {
-#if defined REALISM
-	OnRealismEnded();
-#endif
 	// If custom healthkit model is defined...
 	if (GetConVar[Healthkit_NewModel][Value])
 	{
@@ -199,17 +188,42 @@ public OnConfigsExecuted()
 	PrecacheModel(HealthkitModel);
 	PrecacheModel(HealthkitModel2);
 	PrecacheSound(HealthkitSound);
-	PrecacheSound(HealSound);
 
 	// No need to precache ammo boxes/tnt models and sounds (because those are stock), but its required precache grenades pick sound
 	PrecacheSound(PickSound);
 
+#if defined REALISM
+	OnRealismEnded();
+#else
+	PrecacheSound(HealSound);
+#endif
+
 	// Clear old array and recreate repeat timer again
 	ClearArray(DropEntsArray);
-	CreateTimer(THINKTIMER_INTERVAL, DropEntRemover_Think, _, TIMER_FLAG_NO_MAPCHANGE|TIMER_REPEAT);
+	CreateTimer(1.0, DropEntRemover_Think, _, TIMER_FLAG_NO_MAPCHANGE|TIMER_REPEAT);
 }
 
 #if defined REALISM
+/* OnEntityCreated()
+ *
+ * When an entity is created.
+ * ---------------------------------------------------------------------------------------------------- */
+public OnEntityCreated(entity, const String:classname[])
+{
+	// Check whether nor not client side ragdoll was created
+	if (StrEqual(classname, "dod_ragdoll"))
+	{
+		// If ragdolls should stay during all the round, kill original now
+		if (GetConVar[RagdollStay][Value]) RemoveEntity(entity);
+	}
+	else if (StrEqual(classname, "prop_ragdoll"))
+	{
+		// A Server-side ragdoll was spawned
+		if (GetConVar[RagdollStay][Value]) // Disable motions for this ragdoll after 5 seconds due to expensive transmit
+			CreateTimer(5.0, Timer_DisableMotion, EntIndexToEntRef(entity), TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
 /* OnClientPutInServer()
  *
  * Called when a client is entering the game.
@@ -283,43 +297,7 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 #if defined REALISM
 		// Check whether or not ragdolls should stay in Realism DropManager
 		if (GetConVar[RagdollStay][Value])
-		{
-			// Create new ragdoll, because client-side ragdoll is removed
-			new ragdoll = CreateEntityByName("prop_ragdoll");
-
-			// Retrieve all the victim positions before death
-			decl Float:origin[3], Float:angles[3], Float:velocity[3], String:model[PLATFORM_MAX_PATH];
-			GetClientAbsOrigin(client, origin);
-			GetClientEyeAngles(client, angles);
-
-			// Get victim model
-			GetClientModel(client, model, sizeof(model));
-
-			// Set origin, angles and velocity for ragdoll
-			origin[2]   += 45.0;
-
-			// Set random angles and velocity to make falling a bit more realistic
-			angles[2]   += GetRandomFloat(-45.0, 45.0);
-			velocity[2] += GetRandomFloat(-45.0, 45.0);
-
-			// Set ragdoll model same as victim model
-			SetEntityModel(ragdoll, model);
-
-			// Spawn ragdoll
-			if (DispatchSpawn(ragdoll))
-			{
-				// Make it non-solid and teleport created ragdoll at place where player dies
-				SetEntProp(ragdoll, Prop_Send, "m_CollisionGroup", 11);
-
-				// An experimental stuff with dead players revive
-				SetEntPropEnt(ragdoll, Prop_Data, "m_hKiller", client);
-				SetEntProp(ragdoll, Prop_Send, "m_iTeamNum", GetClientTeam(client));
-				TeleportEntity(ragdoll, origin, angles, NULL_VECTOR);
-
-				// Disable motions for this ragdoll after 5 seconds because server-side ragdolls are very expensive
-				CreateTimer(5.0, Timer_DisableMotion, EntIndexToEntRef(ragdoll), TIMER_FLAG_NO_MAPCHANGE);
-			}
-		}
+		{ CreateServerSideRagdoll(client); }
 #endif
 		// Does dead drop features is enabled ?
 		switch (GetConVar[DeadDrop][Value])
@@ -472,7 +450,6 @@ public OnWeaponDrop(client, weapon)
 		// Try to find datamap offset for m_spawnflags property
 		if (!spawnflags && (spawnflags = FindDataMapOffs(weapon, "m_spawnflags")) == -1)
 		{
-			// Not found!
 			ThrowError("Failed to obtain offset: \"m_spawnflags\"!");
 		}
 
@@ -495,7 +472,7 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 #if defined REALISM
 	if (IsValidClient(client)
 	&& IsPlayerAlive(client)
-	&& !IS_MEDIC(client)  // Medics are not allowed to drop their weapons
+	&& !IS_MEDIC(client)
 	&& AllowItemDropping) // In realism dropmanager check whether or not dropping is allowed
 #else
 	if (IsValidClient(client) && IsPlayerAlive(client))
@@ -567,7 +544,7 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 #if defined REALISM
 	if (IsValidClient(client)
 	&& IsPlayerAlive(client)
-	&& !IS_MEDIC(client)
+	&& !IS_MEDIC(client) // Medics are not allowed to drop one more healthkit
 	&& AllowItemDropping)
 #else
 	if (IsValidClient(client) && IsPlayerAlive(client))
@@ -735,8 +712,9 @@ public Action:Timer_DisableMotion(Handle:event, any:data)
 	new entity  = EntRefToEntIndex(data);
 	if (entity != INVALID_ENT_REFERENCE)
 	{
-		// If entity reference is valid, accept disable motion input for ragdoll
-		AcceptEntityInput(entity, "DisableMotion");
+		// If entity reference is valid, accept disable motion input
+		AcceptEntityInput(entity, "DisableMotion"); // Set ragdoll's team same as player's one (due to FieldMedic compat)
+		SetEntProp(entity, Prop_Send, "m_iTeamNum", GetClientTeam(GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity")));
 	}
 }
 
@@ -828,7 +806,7 @@ CreateItem(client, index)
 		// Scale velocity by 317 units
 		ScaleVector(velocity, 317.0);
 
-		// Increase origin's and velocity Z-vector to teleport entity properly after and before player's death
+		// Increase origin's and velocity Z-vector to teleport item properly
 		origin[2]   += IsAlivePlayer ? ALIVEORIGIN : DEATHORIGIN;
 		velocity[2] += ALIVEORIGIN;
 
@@ -862,14 +840,26 @@ CreateItem(client, index)
 	}
 }
 
-#if !defined REALISM
+#if defined REALISM
+/* CreateServerRagdoll()
+ *
+ * Creates a server-side ragdoll.
+ * ---------------------------------------------------------------------------------------------------- */
+CreateServerSideRagdoll(client)
+{
+	new any:info[3];
+
+	//CBaseEntity *CreateServerRagdoll( CBaseAnimating *pAnimating, int forceBone, const CTakeDamageInfo &info, int collisionGroup, bool bUseLRURetirement )
+	return SDKCall(CreateServerRagdoll, client, 0, info, COLLISION_GROUP_INTERACTIVE_DERBIS, false);
+}
+#else
 /* DOD_DropWeapon()
  *
  * Forces a player to drop their weapon.
  * ---------------------------------------------------------------------------------------------------- */
 DOD_DropWeapon(client, weapon, const Float:vecTarget[3])
 {
-	// Check for valid client and weapon too
+	// Check for valid client and its weapon
 	if (IsValidClient(client) && IsValidEntity(weapon))
 	{
 		// Force a client to drop the specified weapon

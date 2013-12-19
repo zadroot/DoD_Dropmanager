@@ -80,14 +80,15 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 				}
 				else
 				{
-					if ((GetEntData(client, m_iAmmo + 16) < 56)
-					&&  (GetEntData(client, m_iAmmo + 20) < 35)
-					&&  (GetEntData(client, m_iAmmo + 28) < 35)
-					&&  (GetEntData(client, m_iAmmo + 32) < 210)
-					&&  (GetEntData(client, m_iAmmo + 36) < 140)
-					&&  (GetEntData(client, m_iAmmo + 40) < 450)
-					&&  (GetEntData(client, m_iAmmo + 44) < 750)
-					&&  (GetEntData(client, m_iAmmo + 48) < 5))
+					// Check for ammo limits
+					if ((GetEntData(client, m_iAmmo + 16) < 56)  // Garand
+					&&  (GetEntData(client, m_iAmmo + 20) < 35)  // K98 + scoped
+					&&  (GetEntData(client, m_iAmmo + 28) < 35)  // Spring
+					&&  (GetEntData(client, m_iAmmo + 32) < 210) // Thompson+MP40+MP44
+					&&  (GetEntData(client, m_iAmmo + 36) < 140) // Bar
+					&&  (GetEntData(client, m_iAmmo + 40) < 450) // 30cal
+					&&  (GetEntData(client, m_iAmmo + 44) < 750) // MG42
+					&&  (GetEntData(client, m_iAmmo + 48) < 5))  // Rocket
 					{
 						RemoveEntity(ammobox);
 						EmitAmbientSound(AmmoSound, vecOrigin, client);

@@ -11,9 +11,6 @@
 
 #define SMALLEST_INTERVAL 0.1
 
-#if !defined REALISM
-#define COLT 0
-#endif
 #define frag_us 0
 #define frag_ger 1
 
@@ -25,6 +22,8 @@ enum pistols
 	c96,
 	m1carbine
 }
+#else
+#define COLT 0
 #endif
 
 // I've changed array to avoid overbounds
@@ -210,7 +209,6 @@ SetPistolAmmo_Realism(client, weapon, type)
 		}
 	}
 }
-
 #else
 /* SetPistolAmmo()
  *

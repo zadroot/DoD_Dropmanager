@@ -14,7 +14,9 @@ new	const
 	String:HealthkitModel[]   = { "models/props_misc/ration_box01.mdl" },
 	String:HealthkitModel2[]  = { "models/props_misc/ration_box02.mdl" },
 	String:HealthkitSound[]   = { "object/object_taken.wav" },
+#if !defined REALISM
 	String:HealSound[]        = { "items/smallmedkit1.wav" },
+#endif
 	String:HealthkitFiles[][] =
 {
 	"models/props_misc/ration_box02.dx80.vtx",
@@ -74,7 +76,12 @@ public Action:OnHealthKitTouched(healthkit, client)
 				// Kill it immediately (fix for 'infinite heal')
 				RemoveEntity(healthkit);
 
+#if defined REALISM
+				EmitAmbientSound(HealthkitSound, vecOrigin, client);
+#else
+				// Emit heal sound on normal dropmanager, but dont make any noice in realism!
 				EmitAmbientSound(HealSound, vecOrigin, client);
+#endif
 
 				// If current client health + healthkit is more than 100, just give player full health
 				if (health + healthkitadd >= MAXHEALTH)
