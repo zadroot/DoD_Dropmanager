@@ -16,27 +16,27 @@
 #include <sdkhooks>
 
 // ====[ CONSTANTS ]===================================================================================
-#define PLUGIN_NAME         "DoD:S DropManager"
+#define PLUGIN_NAME       "DoD:S DropManager"
 #if defined REALISM
-#define PLUGIN_VERSION      "1.0 Realism"
+#define PLUGIN_VERSION    "1.0 Realism"
 #else
-#define PLUGIN_VERSION      "4.0"
+#define PLUGIN_VERSION    "4.0"
 #endif
 
 // Too many macros (c) Andersso
-#define HOOKTOUCH_DELAY     0.5
-#define DEATHORIGIN         5.0
-#define ALIVEORIGIN         43.0
+#define HOOKTOUCH_DELAY   0.5
+#define DEATHORIGIN       5.0
+#define ALIVEORIGIN       43.0
 
-#define MAX_WEAPON_LENGTH   24
-#define DOD_MAXPLAYERS      33
+#define MAX_WEAPON_LENGTH 24
+#define DOD_MAXPLAYERS    33
 #if defined REALISM
 #define COLLISION_GROUP_INTERACTIVE_DERBIS 3
-#define IS_MEDIC(%1)        GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1)
-#define SF_NORESPAWN        (1 << 30)
-#define MAXHEALTH           83 // Maximum health bounds for realism dropmanager
+#define IS_MEDIC(%1)      GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1)
+#define SF_NORESPAWN      (1 << 30)
+#define MAXHEALTH         83 // Maximum health bounds for realism dropmanager
 #else
-#define MAXHEALTH           100
+#define MAXHEALTH         100
 #endif
 
 enum //Slots
@@ -267,9 +267,6 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	if (GetClientHealth(client) < 1)
 	{
-#if !defined REALISM
-		decl Float:origin[3]; GetClientAbsOrigin(client, origin);
-#endif
 		// Retrieve the pistol and grenade weapons before player's death
 		new pistol  = GetPlayerWeaponSlot(client, SLOT_SECONDARY);
 		new grenade = GetPlayerWeaponSlot(client, SLOT_GRENADE);
@@ -298,6 +295,8 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 			// Disable motions for this ragdoll after 5 seconds due to expensive transmit
 			CreateTimer(5.0, Timer_DisableMotion, EntIndexToEntRef(ragdoll), TIMER_FLAG_NO_MAPCHANGE);
 		}
+#else
+		decl Float:origin[3]; GetClientAbsOrigin(client, origin);
 #endif
 		// Does dead drop features is enabled ?
 		switch (GetConVar[DeadDrop][Value])
@@ -849,7 +848,8 @@ CreateServerSideRagdoll(client)
 {
 	new any:info[3];
 
-	//CBaseEntity *CreateServerRagdoll( CBaseAnimating *pAnimating, int forceBone, const CTakeDamageInfo &info, int collisionGroup, bool bUseLRURetirement )
+	// bUseLRURetirement must be set to false
+	/**CBaseEntity *CreateServerRagdoll( CBaseAnimating *pAnimating, int forceBone, const CTakeDamageInfo &info, int collisionGroup, bool bUseLRURetirement )*/
 	return SDKCall(CreateServerRagdoll, client, 0, info, COLLISION_GROUP_INTERACTIVE_DERBIS, false);
 }
 #else
