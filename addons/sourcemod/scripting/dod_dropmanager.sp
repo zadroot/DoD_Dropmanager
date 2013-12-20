@@ -9,7 +9,7 @@
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
-/* If you need to get Realism DropManager, just recompile a plugin with REALISM definition below */
+/* If you need to get Realism DropManager - just recompile a plugin with REALISM definition below */
 //#define REALISM
 
 #include <sdktools>
@@ -32,7 +32,7 @@
 #define DOD_MAXPLAYERS      33
 #if defined REALISM
 #define COLLISION_GROUP_INTERACTIVE_DERBIS 3
-#define IS_MEDIC(%1)        GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1) // Compatibility with FieldMedic
+#define IS_MEDIC(%1)        GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1)
 #define SF_NORESPAWN        (1 << 30)
 #define MAXHEALTH           83 // Maximum health bounds for realism dropmanager
 #else
@@ -159,6 +159,7 @@ public OnPluginStart()
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_ByRef);   // info
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);   // collisionGroup
 	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);           // bUseLRURetirement
+	PrepSDKCall_SetReturnInfo(SDKType_CBaseEntity, SDKPass_Pointer); // Entity index
 
 	if ((CreateServerRagdoll = EndPrepSDKCall()) == INVALID_HANDLE)
 	{
@@ -189,7 +190,7 @@ public OnConfigsExecuted()
 	PrecacheModel(HealthkitModel2);
 	PrecacheSound(HealthkitSound);
 
-	// No need to precache ammo boxes/tnt models and sounds (because those are stock), but its required precache grenades pick sound
+	// No need to precache ammo boxes/tnt models and sounds (because those are stock)
 	PrecacheSound(PickSound);
 
 #if defined REALISM
@@ -215,12 +216,6 @@ public OnEntityCreated(entity, const String:classname[])
 	{
 		// If ragdolls should stay during all the round, kill original now
 		if (GetConVar[RagdollStay][Value]) RemoveEntity(entity);
-	}
-	else if (StrEqual(classname, "prop_ragdoll"))
-	{
-		// A Server-side ragdoll was spawned
-		if (GetConVar[RagdollStay][Value]) // Disable motions for this ragdoll after 5 seconds due to expensive transmit
-			CreateTimer(5.0, Timer_DisableMotion, EntIndexToEntRef(entity), TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
@@ -295,9 +290,14 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 		{ HasNade[client] = true; }
 
 #if defined REALISM
-		// Check whether or not ragdolls should stay in Realism DropManager
 		if (GetConVar[RagdollStay][Value])
-		{ CreateServerSideRagdoll(client); }
+		{
+			// This will also return ragdoll index (cause of last SDKCall param)
+			new ragdoll = CreateServerSideRagdoll(client);
+
+			// Disable motions for this ragdoll after 5 seconds due to expensive transmit
+			CreateTimer(5.0, Timer_DisableMotion, EntIndexToEntRef(ragdoll), TIMER_FLAG_NO_MAPCHANGE);
+		}
 #endif
 		// Does dead drop features is enabled ?
 		switch (GetConVar[DeadDrop][Value])
