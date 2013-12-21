@@ -289,11 +289,17 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 #if defined REALISM
 		if (GetConVar[RagdollStay][Value])
 		{
+			new Handle:data;
+
 			// This will also return ragdoll index (cause of last SDKCall param)
 			new ragdoll = CreateServerSideRagdoll(client);
 
 			// Disable motions for this ragdoll after 5 seconds due to expensive transmit
-			CreateTimer(5.0, Timer_DisableMotion, EntIndexToEntRef(ragdoll), TIMER_FLAG_NO_MAPCHANGE);
+			CreateDataTimer(5.0, Timer_DisableMotion, data, TIMER_FLAG_NO_MAPCHANGE);
+
+			// Write entity reference and player's team in data timer
+			WritePackCell(data, EntIndexToEntRef(ragdoll));
+			WritePackCell(data, GetClientTeam(client));
 		}
 #else
 		decl Float:origin[3]; GetClientAbsOrigin(client, origin);
@@ -708,13 +714,27 @@ public Action:Timer_SetDieThink(Handle:event, any:data)
  * ---------------------------------------------------------------------------------------------------- */
 public Action:Timer_DisableMotion(Handle:event, any:data)
 {
-	new entity  = EntRefToEntIndex(data);
+	// Make sure we've passed valid data
+	if (data == INVALID_HANDLE)
+	{
+		// Stop timer and log an error if data pack handle is invalid
+		LogError("Invalid ragdoll entity reference or player team index was passed!");
+		return Plugin_Stop;
+	}
+
+	// Reset dp
+	ResetPack(data);
+
+	// Retrieve entity reference from pack and validate it
+	new entity  = EntRefToEntIndex(ReadPackCell(data));
 	if (entity != INVALID_ENT_REFERENCE)
 	{
 		// If entity reference is valid, accept disable motion input
-		AcceptEntityInput(entity, "DisableMotion"); // Set ragdoll's team same as player's one (due to FieldMedic compat)
-		SetEntProp(entity, Prop_Send, "m_iTeamNum", GetClientTeam(GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity")));
+		AcceptEntityInput(entity, "DisableMotion"); // Properly set ragdoll's team same as player's (FieldMedic compat)
+		SetEntProp(entity, Prop_Send, "m_iTeamNum", ReadPackCell(data));
 	}
+
+	return Plugin_Stop;
 }
 
 /* OnRealismStarted()
