@@ -9,7 +9,7 @@
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
-/* If you need to get Realism DropManager - just recompile a plugin with REALISM definition below */
+/** If you need to get Realism DropManager - just recompile a plugin with REALISM definition below */
 //#define REALISM
 
 #include <sdktools>
@@ -34,7 +34,7 @@
 #define COLLISION_GROUP_INTERACTIVE_DERBIS 3
 #define IS_MEDIC(%1)      GetEntProp(%1, Prop_Send, "m_bWearingSuit", 1)
 #define SF_NORESPAWN      (1 << 30)
-#define MAXHEALTH         83 // Maximum health bounds for realism dropmanager
+#define MAXHEALTH         83 // Maximum health bounds for realism dropmanager (community request)
 #else
 #define MAXHEALTH         100
 #endif
@@ -86,7 +86,6 @@ new	Handle:SetDieThink         = INVALID_HANDLE,
 
 // ====[ PLUGIN ]======================================================================================
 #include "dropmanager/convars.sp"
-#include "dropmanager/entremover.sp"
 #include "dropmanager/ammobox.sp"
 #include "dropmanager/healthkit.sp"
 #include "dropmanager/tnt.sp"
@@ -127,9 +126,6 @@ public OnPluginStart()
 
 	// Create and exec plugin's configuration file
 	AutoExecConfig(true, "dod_dropmanager");
-
-	// Create a global dynamic array for dropped entitys
-	DropEntsArray = CreateArray(DropEntInfo_Size);
 
 #if defined REALISM
 	new Handle:gameConf = LoadGameConfigFile("plugin.dropmanager");
@@ -198,10 +194,6 @@ public OnConfigsExecuted()
 #else
 	PrecacheSound(HealSound);
 #endif
-
-	// Clear old array and recreate repeat timer again
-	ClearArray(DropEntsArray);
-	CreateTimer(1.0, DropEntRemover_Think, _, TIMER_FLAG_NO_MAPCHANGE|TIMER_REPEAT);
 }
 
 #if defined REALISM
@@ -722,7 +714,7 @@ public Action:Timer_DisableMotion(Handle:event, any:data)
 		return Plugin_Stop;
 	}
 
-	// Reset dp
+	// Reset data pack
 	ResetPack(data);
 
 	// Retrieve entity reference from pack and validate it
@@ -730,7 +722,7 @@ public Action:Timer_DisableMotion(Handle:event, any:data)
 	if (entity != INVALID_ENT_REFERENCE)
 	{
 		// If entity reference is valid, accept disable motion input
-		AcceptEntityInput(entity, "DisableMotion"); // Properly set ragdoll's team same as player's (FieldMedic compat)
+		AcceptEntityInput(entity, "DisableMotion"); // Properly set ragdoll's team same as player's (a FieldMedic compatibility)
 		SetEntProp(entity, Prop_Send, "m_iTeamNum", ReadPackCell(data));
 	}
 
@@ -748,9 +740,6 @@ public Action:OnRealismStarted()
 
 	// Disallow dropping
 	AllowItemDropping = false;
-
-	// Clear all dropped items array to dont remove anything during warmup
-	ClearArray(DropEntsArray);
 }
 
 /* OnRealismEnded()
@@ -853,9 +842,20 @@ CreateItem(client, index)
 
 		CreateTimer(HOOKTOUCH_DELAY, HookItemTouch, EntIndexToEntRef(item), TIMER_FLAG_NO_MAPCHANGE);
 
-		// Add item to DropEntRemover queue
+		// Set lifetime of an item if defined
 		if (GetConVar[ItemLifeTime][Value])
-			DropEntRemover_AddDropEnt(item);
+		{
+			// declare outout
+			decl String:output[32];
+
+			// Add output to kill itself when time is expired
+			Format(output, sizeof(output), "OnUser1 !self:kill::%0.2f:-1", GetConVar[ItemLifeTime][Value]);
+
+			// Set a string in the global variant object and properly add output to make it work
+			SetVariantString(output);
+			AcceptEntityInput(item, "AddOutput");
+			AcceptEntityInput(item, "FireUser1");
+		}
 	}
 }
 
@@ -866,7 +866,7 @@ CreateItem(client, index)
  * ---------------------------------------------------------------------------------------------------- */
 CreateServerSideRagdoll(client)
 {
-	new any:info[3];
+	new any:info[23];
 
 	// bUseLRURetirement must be set to false
 	/**CBaseEntity *CreateServerRagdoll( CBaseAnimating *pAnimating, int forceBone, const CTakeDamageInfo &info, int collisionGroup, bool bUseLRURetirement )*/
@@ -990,7 +990,7 @@ RemoveWeapon(client, slot)
  * ---------------------------------------------------------------------------------------------------- */
 RemoveEntity(const entity)
 {
-	return AcceptEntityInput(entity, "KillHierarchy");
+	return AcceptEntityInput(entity, "Kill");
 }
 
 /* IsValidClient()

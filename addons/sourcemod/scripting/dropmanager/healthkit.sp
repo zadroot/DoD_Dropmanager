@@ -75,14 +75,12 @@ public Action:OnHealthKitTouched(healthkit, client)
 			{
 				// Kill it immediately (fix for 'infinite heal')
 				RemoveEntity(healthkit);
-
 #if defined REALISM
 				EmitAmbientSound(HealthkitSound, vecOrigin, client);
 #else
 				// Emit heal sound on normal dropmanager, but dont make any noice in realism!
 				EmitAmbientSound(HealSound, vecOrigin, client);
 #endif
-
 				// If current client health + healthkit is more than 100, just give player full health
 				if (health + healthkitadd >= MAXHEALTH)
 				{
