@@ -155,7 +155,7 @@ PerformAmmunition(client, ammotype:index)
 
 		// Prepare weapon id. Needed to find weapon, ammo & clipsize from tables
 		new WeaponID = INVALID_ITEM;
-		for (new i = 0; i < sizeof(Weapons); i++)
+		for (new i; i < sizeof(Weapons); i++)
 		{
 			// Skip the first 7 characters in weapon string to avoid comparing the "weapon_" prefix
 			if (StrEqual(Weapon[7], Weapons[i]))

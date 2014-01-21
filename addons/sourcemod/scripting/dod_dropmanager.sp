@@ -10,7 +10,7 @@
 */
 
 /** If you need to get Realism DropManager - just recompile a plugin with REALISM definition below */
-//#define REALISM
+// #define REALISM
 
 #include <sdktools>
 #include <sdkhooks>
@@ -177,7 +177,7 @@ public OnConfigsExecuted()
 	if (GetConVar[Healthkit_NewModel][Value])
 	{
 		// ...allow custom healthkit files to be downloaded to clients
-		for (new i = 0; i < sizeof(HealthkitFiles); i++)
+		for (new i; i < sizeof(HealthkitFiles); i++)
 			AddFileToDownloadsTable(HealthkitFiles[i]);
 	}
 
@@ -442,7 +442,7 @@ public OnWeaponDrop(client, weapon)
 	if (!GetConVar[ItemLifeTime][Value] && IsValidEntity(weapon))
 	{
 		// Prepare spawnflags datamap offset
-		static spawnflags = 0;
+		static spawnflags;
 
 		// Try to find datamap offset for m_spawnflags property
 		if (!spawnflags && (spawnflags = FindDataMapOffs(weapon, "m_spawnflags")) == -1)
@@ -450,11 +450,11 @@ public OnWeaponDrop(client, weapon)
 			ThrowError("Failed to obtain offset: \"m_spawnflags\"!");
 		}
 
-		// Remove SF_NORESPAWN flag from m_spawnflags property
+		// Remove SF_NORESPAWN flag from m_spawnflags datamap
 		SetEntData(weapon, spawnflags, GetEntData(weapon, spawnflags) & ~SF_NORESPAWN);
 
-		// After doing that call signature to properly dont remove weapons from the ground
-		CreateTimer(0.1, Timer_SetDieThink, EntIndexToEntRef(weapon), TIMER_FLAG_NO_MAPCHANGE);
+		// And call the signature to properly dont remove weapons from the ground
+		CreateTimer(SMALLEST_INTERVAL, Timer_SetDieThink, EntIndexToEntRef(weapon), TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 #endif
@@ -482,7 +482,7 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 			GetClientWeapon(client, weapon, sizeof(weapon));
 
 			// Loop through all pistol classnames
-			for (new i = 0; i < sizeof(Pistols); i++)
+			for (new i; i < sizeof(Pistols); i++) // i=0
 			{
 #if defined REALISM
 				// Check whether or not player holding a pistol
