@@ -40,7 +40,7 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 	if (IsValidClient(client))
 	{
 		// Make sure client is having a weapon, because plugin wont equip ammo for unexist weapon
-		if (IsValidEntity(GetPlayerWeaponSlot(client, SLOT_PRIMARY)))
+		if (IsValidEdict(GetPlayerWeaponSlot(client, SLOT_PRIMARY)))
 		{
 			decl Float:vecOrigin[3]; GetClientEyePosition(client, vecOrigin);
 
@@ -81,15 +81,16 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 				else
 				{
 					// Check for ammo limits
-					if ((GetEntData(client, m_iAmmo + 16) < 56)  // Garand
-					&&  (GetEntData(client, m_iAmmo + 20) < 35)  // K98 + scoped
-					&&  (GetEntData(client, m_iAmmo + 28) < 35)  // Spring
-					&&  (GetEntData(client, m_iAmmo + 32) < 210) // Thompson+MP40+MP44
-					&&  (GetEntData(client, m_iAmmo + 36) < 140) // Bar
-					&&  (GetEntData(client, m_iAmmo + 40) < 450) // 30cal
-					&&  (GetEntData(client, m_iAmmo + 44) < 750) // MG42
-					&&  (GetEntData(client, m_iAmmo + 48) < 5))  // Rocket
+					if ((GetEntData(client, m_iAmmo + ammo_offset[0]) < 56)  // Garand
+					&&  (GetEntData(client, m_iAmmo + ammo_offset[1]) < 35)  // K98 + scoped
+					&&  (GetEntData(client, m_iAmmo + ammo_offset[6]) < 35)  // Spring
+					&&  (GetEntData(client, m_iAmmo + ammo_offset[2]) < 210) // Thompson+MP40+MP44
+					&&  (GetEntData(client, m_iAmmo + ammo_offset[4]) < 140) // Bar
+					&&  (GetEntData(client, m_iAmmo + ammo_offset[8]) < 450) // 30cal
+					&&  (GetEntData(client, m_iAmmo + ammo_offset[9]) < 750) // MG42
+					&&  (GetEntData(client, m_iAmmo + ammo_offset[10]) < 5)) // Rocket
 					{
+						// As usual
 						RemoveEntity(ammobox);
 						EmitAmbientSound(AmmoSound, vecOrigin, client);
 						PerformAmmunition(client, ammotype:pickup);
@@ -111,7 +112,7 @@ public Action:OnAmmoBoxTouched(ammobox, client)
 SpawnAmmoBox(ammobox, client, bool:IsAlivePlayer)
 {
 	// Make sure that weapon is valid
-	if (IsValidEntity(GetPlayerWeaponSlot(client, SLOT_PRIMARY)))
+	if (IsValidEdict(GetPlayerWeaponSlot(client, SLOT_PRIMARY)))
 	{
 		// Set ammo box model and ammo box team depends on team
 		switch (GetClientTeam(client))
@@ -147,7 +148,7 @@ PerformAmmunition(client, ammotype:index)
 	new PrimaryWeapon = GetPlayerWeaponSlot(client, SLOT_PRIMARY);
 
 	// Weapon is valid?
-	if (IsValidEntity(PrimaryWeapon))
+	if (IsValidEdict(PrimaryWeapon))
 	{
 		// Retrieve a weapon classname
 		decl String:Weapon[MAX_WEAPON_LENGTH];

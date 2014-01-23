@@ -21,7 +21,7 @@ public OnBombTouched(tnt, client)
 	if (IsValidClient(client))
 	{
 		// If player is dont have a bomb (weapon in 4th slot) - perform TNT equip
-		if (!IsValidEntity(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE)))
+		if (!IsValidEdict(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE)))
 		{
 			new pickuprule = GetConVar[TNT_PickupRule][Value];
 			new clteam     = GetClientTeam(client);
@@ -56,7 +56,7 @@ SpawnTNT(tnt, client, bool:IsAlivePlayer)
 	// Get bomb slot
 	new bomb = GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE);
 
-	if (IsValidEntity(bomb))
+	if (IsValidEdict(bomb))
 	{
 		// Set TNT model and spawn it
 		SetEntityModel(tnt, TNTModel);

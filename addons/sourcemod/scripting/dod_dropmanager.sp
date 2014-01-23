@@ -10,7 +10,7 @@
 */
 
 /** If you need to get Realism DropManager - just recompile a plugin with REALISM definition below */
-// #define REALISM
+//#define REALISM
 
 #include <sdktools>
 #include <sdkhooks>
@@ -24,10 +24,6 @@
 #endif
 
 // Too many macros (c) Andersso
-#define HOOKTOUCH_DELAY   0.5
-#define DEATHORIGIN       5.0
-#define ALIVEORIGIN       43.0
-
 #define MAX_WEAPON_LENGTH 24
 #define DOD_MAXPLAYERS    33
 #if defined REALISM
@@ -77,7 +73,8 @@ enum //Pickup rule
 	enemies
 }
 
-new	LastDropped[DOD_MAXPLAYERS + 1], Handle:dropmenu = INVALID_HANDLE;
+new	LastDropped[DOD_MAXPLAYERS + 1],
+	Handle:dropmenu = INVALID_HANDLE;
 #if defined REALISM
 new	Handle:SetDieThink         = INVALID_HANDLE,
 	Handle:CreateServerRagdoll = INVALID_HANDLE,
@@ -141,7 +138,7 @@ public OnPluginStart()
 	PrepSDKCall_SetFromConf(gameConf, SDKConf_Signature, "SetDieThink");
 	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
 
-	// If signature is not valid, disable plugin and ask author!
+	// If signature is not valid, disable plugin and ask author
 	if ((SetDieThink = EndPrepSDKCall()) == INVALID_HANDLE)
 	{
 		SetFailState("Failed to init SDKCall: \"SetDieThink\"!");
@@ -173,15 +170,15 @@ public OnPluginStart()
  * ---------------------------------------------------------------------------------------------------- */
 public OnConfigsExecuted()
 {
-	// If custom healthkit model is defined...
+	// If custom healthkit model is defined
 	if (GetConVar[Healthkit_NewModel][Value])
 	{
-		// ...allow custom healthkit files to be downloaded to clients
+		// Allow custom healthkit files to be downloaded to clients
 		for (new i; i < sizeof(HealthkitFiles); i++)
 			AddFileToDownloadsTable(HealthkitFiles[i]);
 	}
 
-	// Precache a healthkit's model & sounds
+	// Precache required healthkit's files
 	PrecacheModel(HealthkitModel);
 	PrecacheModel(HealthkitModel2);
 	PrecacheSound(HealthkitSound);
@@ -206,8 +203,11 @@ public OnEntityCreated(entity, const String:classname[])
 	// Check whether nor not client side ragdoll was created
 	if (StrEqual(classname, "dod_ragdoll"))
 	{
-		// If ragdolls should stay during all the round, kill original now
-		if (GetConVar[RagdollStay][Value]) RemoveEntity(entity);
+		if (GetConVar[RagdollStay][Value])
+		{
+			// If ragdolls should stay during all the round, kill original now
+			RemoveEntity(entity);
+		}
 	}
 }
 
@@ -232,21 +232,14 @@ public OnPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast)
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
 	// If healthkits is enabled, allow players to use it (otherwise disable)
-	if (GetConVar[AllowHealthkit][Value])
-		 HasHealthkit[client] = true;
-	else HasHealthkit[client] = false;
-
-	if (GetConVar[AllowAmmoBox][Value])
-		 HasAmmoBox[client] = true;
-	else HasAmmoBox[client] = false;
+	HasHealthkit[client] = GetConVar[AllowHealthkit][Value];
+	HasAmmoBox[client]   = GetConVar[AllowAmmoBox][Value];
 
 	// Change pistol, grenade and a TNT availability in player's backpack to false (just make sure those are not available yet)
-	HasPistol[client] = false;
-	HasNade[client]   = false;
-	HasTNT[client]    = false;
-
-	// Reset amount of dropped bombs at every player respawn
-	BombsDropped[client] = false;
+	BombsDropped[client] = /*Reset amount of dropped bombs at every player respawn*/
+	HasPistol[client]    =
+	HasNade[client]      =
+	HasTNT[client]       = false;
 }
 
 /* OnPlayerDeath()
@@ -266,22 +259,22 @@ public OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 
 		// Check 4th slot (TNT) right before death, because 'dod_tnt_pickup' event is client-side only
 		if (GetConVar[AllowTNT][Value]
-		&& IsValidEntity(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE)))
+		&& IsValidEdict(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE)))
 		{ HasTNT[client] = true; }
 
 		// Make sure player is having a pistol in his inventory
 		if (GetConVar[AllowPistols][Value]
-		&& IsValidEntity(pistol))
+		&& IsValidEdict(pistol))
 		{ HasPistol[client] = true; }
 
 		if (GetConVar[AllowNade][Value]
-		&& IsValidEntity(grenade))
+		&& IsValidEdict(grenade))
 		{ HasNade[client] = true; }
 
 #if defined REALISM
 		if (GetConVar[RagdollStay][Value])
 		{
-			new Handle:data;
+			new Handle:data = INVALID_HANDLE;
 
 			// This will also return ragdoll index (cause of last SDKCall param)
 			new ragdoll = CreateServerSideRagdoll(client);
@@ -398,7 +391,7 @@ public Action:OnPlayerRunCmd(client, &buttons)
 		new item = GetClientAimTarget(client, false);
 
 		// If we found an entity - make sure its valid
-		if (IsValidEntity(item))
+		if (IsValidEdict(item))
 		{
 			// Retrieve the client's eye position and entity origin vector to compare distance
 			decl Float:vec1[3], Float:vec2[3];
@@ -439,7 +432,7 @@ public Action:OnPlayerRunCmd(client, &buttons)
 public OnWeaponDrop(client, weapon)
 {
 	// Make sure weapon is valid and infinite time is set
-	if (!GetConVar[ItemLifeTime][Value] && IsValidEntity(weapon))
+	if (!GetConVar[ItemLifeTime][Value] && IsValidEdict(weapon))
 	{
 		// Prepare spawnflags datamap offset
 		static spawnflags;
@@ -475,12 +468,12 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 	if (IsValidClient(client) && IsPlayerAlive(client))
 #endif
 	{
+		// Get name of weapon which player is holiding at this moment
+		decl String:weapon[MAX_WEAPON_LENGTH];
+		GetClientWeapon(client, weapon, sizeof(weapon));
+
 		if (GetConVar[AllowPistols][Value])
 		{
-			// Get name of weapon which player is holiding at this moment
-			decl String:weapon[MAX_WEAPON_LENGTH];
-			GetClientWeapon(client, weapon, sizeof(weapon));
-
 			// Loop through all pistol classnames
 			for (new i; i < sizeof(Pistols); i++) // i=0
 			{
@@ -512,9 +505,6 @@ public Action:OnDropWeapon(client, const String:command[], argc)
 		// Does player can drop their grenades?
 		if (GetConVar[AllowNade][Value])
 		{
-			decl String:weapon[MAX_WEAPON_LENGTH];
-			GetClientWeapon(client, weapon, sizeof(weapon));
-
 			// Does player is holding frag grenades now?
 			if (StrEqual(weapon, Grenades[frag_us])
 			||  StrEqual(weapon, Grenades[frag_ger]))
@@ -552,7 +542,7 @@ public Action:OnDropAmmo(client, const String:command[], argc)
 		{
 			// It's really needed to check for TNT availability here (and using only this way)
 			if (GetConVar[AllowTNT][Value]
-			&& IsValidEntity(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE))
+			&& IsValidEdict(GetPlayerWeaponSlot(client, SLOT_EXPLOSIVE))
 			&& BombsDropped[client] < GetConVar[TNT_DropLimit][Value])
 			{ HasTNT[client] = true; }
 
@@ -815,8 +805,8 @@ CreateItem(client, index)
 		ScaleVector(velocity, 317.0);
 
 		// Increase origin's and velocity Z-vector to teleport item properly
-		origin[2]   += IsAlivePlayer ? ALIVEORIGIN : DEATHORIGIN;
-		velocity[2] += ALIVEORIGIN;
+		origin[2]   += IsAlivePlayer ? 43.0 : 5.0;
+		velocity[2] += 43.0;
 
 		switch (index)
 		{
@@ -840,7 +830,7 @@ CreateItem(client, index)
 		// Do a timestamp after dropping item
 		LastDropped[client] = GetTime();
 
-		CreateTimer(HOOKTOUCH_DELAY, HookItemTouch, EntIndexToEntRef(item), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(SMALLEST_INTERVAL * 2, HookItemTouch, EntIndexToEntRef(item), TIMER_FLAG_NO_MAPCHANGE);
 
 		// Set lifetime of an item if defined
 		if (GetConVar[ItemLifeTime][Value])
@@ -880,7 +870,7 @@ CreateServerSideRagdoll(client)
 DOD_DropWeapon(client, weapon, const Float:vecTarget[3])
 {
 	// Check for valid client and its weapon
-	if (IsValidClient(client) && IsValidEntity(weapon))
+	if (IsValidClient(client) && IsValidEdict(weapon))
 	{
 		// Force a client to drop the specified weapon
 		SDKHooks_DropWeapon(client, weapon, vecTarget);
@@ -909,7 +899,7 @@ DOD_DropWeapon(client, weapon, const Float:vecTarget[3])
 		SetEntProp(weapon, Prop_Data, "m_iHammerID", Pistol);
 
 		// I have to hook touch callback for dropped pistol as well
-		CreateTimer(HOOKTOUCH_DELAY, HookItemTouch, EntIndexToEntRef(weapon), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(SMALLEST_INTERVAL * 2, HookItemTouch, EntIndexToEntRef(weapon), TIMER_FLAG_NO_MAPCHANGE);
 
 		// Make sure that player is not having a pistol anymore
 		HasPistol[client] = false;
@@ -988,7 +978,7 @@ RemoveWeapon(client, slot)
  *
  * Removes an entity from the world.
  * ---------------------------------------------------------------------------------------------------- */
-RemoveEntity(const entity)
+bool:RemoveEntity(const entity)
 {
 	return AcceptEntityInput(entity, "Kill");
 }

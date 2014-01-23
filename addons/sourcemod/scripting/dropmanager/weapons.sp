@@ -72,7 +72,7 @@ public Action:OnPistolTouched(pistol, client)
 	if (IsValidClient(client))
 	{
 		// If player is not having a pistol, give it to a player
-		if (!IsValidEntity(GetPlayerWeaponSlot(client, SLOT_SECONDARY)))
+		if (!IsValidEdict(GetPlayerWeaponSlot(client, SLOT_SECONDARY)))
 		{
 			// Originally pistol is not having touch sound, but we want to emit it
 			decl Float:vecOrigin[3];
@@ -124,7 +124,7 @@ SpawnPistol(pistol, client, const Float:angles[3], bool:IsAlivePlayer)
 	new secondary = GetPlayerWeaponSlot(client, SLOT_SECONDARY);
 
 	// Does we are going to drop secondary weapon?
-	if (IsValidEntity(secondary))
+	if (IsValidEdict(secondary))
 	{
 		// Declare the string to check classname of a pistol
 		decl String:weapon[MAX_WEAPON_LENGTH];
@@ -188,7 +188,7 @@ SpawnPistol(pistol, client, const Float:angles[3], bool:IsAlivePlayer)
  * ------------------------------------------------------------------------------------------------------ */
 SetPistolAmmo_Realism(client, weapon, type)
 {
-	if (IsValidEntity(weapon))
+	if (IsValidEdict(weapon))
 	{
 		new secondary = GetPlayerWeaponSlot(client, SLOT_SECONDARY);
 		new WeaponID  = GetEntProp(weapon, Prop_Send, "m_nBody");
@@ -247,7 +247,7 @@ public OnGrenadeTouched(nade, client)
 		new gren_us  = GetEntData(client, m_iAmmo + grenadeoffs[frag_us]);
 		new gren_ger = GetEntData(client, m_iAmmo + grenadeoffs[frag_ger]);
 
-		if (IsValidEntity(grenade))
+		if (IsValidEdict(grenade))
 		{
 			// If player is already having grenades, get the classname of them to increase amount if player took same type of grenade
 			GetEdictClassname(grenade, weapon, sizeof(weapon));
@@ -298,7 +298,7 @@ SpawnGrenade(nade, client, const Float:angles[3], bool:IsAlivePlayer)
 	new grenade = GetPlayerWeaponSlot(client, SLOT_GRENADE);
 
 	// Because we cant drop invalid grenade
-	if (IsValidEntity(grenade))
+	if (IsValidEdict(grenade))
 	{
 		// Retrieve the player's ammo offsets for grenades
 		new gren_us  = GetEntData(client, m_iAmmo + grenadeoffs[frag_us]);
@@ -380,7 +380,7 @@ public Action:Timer_ChangeWeapon(Handle:timer, any:client)
 		new GrenadeSlot     = GetPlayerWeaponSlot(client, SLOT_GRENADE);
 
 		// If primary weapon is avalible, switch client's weapon to primary
-		if (IsValidEntity(PrimaryWeapon))
+		if (IsValidEdict(PrimaryWeapon))
 		{
 			GetEdictClassname(PrimaryWeapon, weapon, sizeof(weapon));
 			FakeClientCommand(client, "use %s", weapon);
@@ -388,13 +388,13 @@ public Action:Timer_ChangeWeapon(Handle:timer, any:client)
 		}
 
 		// But if primary weapon is not avalible, use secondary then; otherwise melee
-		else if (IsValidEntity(SecondaryWeapon) && HasPistol[client] == true)
+		else if (IsValidEdict(SecondaryWeapon) && HasPistol[client] == true)
 		{
 			GetEdictClassname(SecondaryWeapon, weapon, sizeof(weapon));
 			FakeClientCommand(client, "use %s", weapon);
 			SetEntPropEnt(client, Prop_Data, "m_hActiveWeapon", SecondaryWeapon);
 		}
-		else if (IsValidEntity(MeleeWeapon))
+		else if (IsValidEdict(MeleeWeapon))
 		{
 			GetEdictClassname(MeleeWeapon, weapon, sizeof(weapon));
 			FakeClientCommand(client, "use %s", weapon);
@@ -402,7 +402,7 @@ public Action:Timer_ChangeWeapon(Handle:timer, any:client)
 		}
 
 		// Or even a grenade
-		else if (IsValidEntity(GrenadeSlot))
+		else if (IsValidEdict(GrenadeSlot))
 		{
 			GetEdictClassname(GrenadeSlot, weapon, sizeof(weapon));
 			FakeClientCommand(client, "use %s", weapon);
